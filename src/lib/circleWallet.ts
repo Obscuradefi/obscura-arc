@@ -57,6 +57,14 @@ const DEFAULT_USERNAME =
 
 // Arc Testnet uses the `/arcTestnet` path segment per the Modular Wallets docs.
 // https://developers.circle.com/wallets/modular/create-a-wallet-and-send-gasless-txn
+// Arc Testnet uses fairly aggressive gas pricing: the bundler refuses any
+// userOp with `maxPriorityFeePerGas` below 1 gwei (`precheck failed`). Viem's
+// default auto-estimator on Arc reports 0.002 gwei which is well below the
+// floor, so we override every userOp with a known-good baseline. The 50 gwei
+// max fee gives plenty of headroom over the ~25 gwei base fee Arc surfaces.
+const ARC_MIN_PRIORITY_FEE = 1_000_000_000n; // 1 gwei
+const ARC_DEFAULT_MAX_FEE = 50_000_000_000n; // 50 gwei
+
 const ARC_TESTNET_PATH = 'arcTestnet';
 
 const STORAGE_CRED_KEY = 'obscura:circle:credential';
@@ -179,6 +187,11 @@ export async function sendGaslessCall(
             // Sponsor gas via Circle Gas Station. On testnet this is automatic;
             // on mainnet it requires a paymaster policy in Circle Console.
             paymaster: true,
+            // Arc Testnet bundler enforces a 1 gwei priority-fee floor. Viem's
+            // auto-estimator usually reports 0.002 gwei which the bundler
+            // rejects with `precheck failed`. Override here.
+            maxPriorityFeePerGas: ARC_MIN_PRIORITY_FEE,
+            maxFeePerGas: ARC_DEFAULT_MAX_FEE,
         });
     } catch (e: any) {
         console.error('[circle] sendUserOperation failed', e);
@@ -237,6 +250,8 @@ export async function sendGaslessBatch(
         account: session.smartAccount,
         calls: encoded,
         paymaster: true,
+        maxPriorityFeePerGas: ARC_MIN_PRIORITY_FEE,
+        maxFeePerGas: ARC_DEFAULT_MAX_FEE,
     });
 
     const receipt = await session.bundlerClient.waitForUserOperationReceipt({
@@ -263,6 +278,8 @@ export async function sendGaslessUsdc(
         account: session.smartAccount,
         calls: [encodeTransfer(to, usdcAddress, amount)],
         paymaster: true,
+        maxPriorityFeePerGas: ARC_MIN_PRIORITY_FEE,
+        maxFeePerGas: ARC_DEFAULT_MAX_FEE,
     });
     const receipt = await session.bundlerClient.waitForUserOperationReceipt({
         hash: userOpHash,
