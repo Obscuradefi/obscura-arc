@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { parseUnits } from 'viem';
+import { usePublicClient } from 'wagmi';
 import { OBSCURA_AMM_ABI } from '../config/dexConfig';
-import { OBSCURA_AMM_ADDRESS } from '../config/arc';
+import { OBSCURA_AMM_ADDRESS, PYTH_CONTRACT_ADDRESS } from '../config/arc';
+import { PYTH_ABI } from '../config/pythAbi';
 import { PYTH_PRICE_IDS } from '../config/priceFeeds';
 import { getPythPriceUpdate, getPythUpdateFee } from '../lib/pythClient';
 import { useUnifiedSendTx } from './useUnifiedSendTx';
@@ -41,6 +43,7 @@ export function usePythSwap(): UsePythSwapResult {
     const [error, setError] = useState<Error | null>(null);
     const [success, setSuccess] = useState(false);
     const { send, isPending, isConfirming, lastHash } = useUnifiedSendTx();
+    const publicClient = usePublicClient();
 
     const executePythSwap = async ({
         fromToken,
@@ -65,9 +68,39 @@ export function usePythSwap(): UsePythSwapResult {
             // the plain swap() path — `swapWithPriceUpdate` with empty data
             // is rejected by the contract.
             const priceUpdate = ids.length > 0 ? await getPythPriceUpdate(ids) : [];
-            const fee = priceUpdate.length > 0 ? getPythUpdateFee(priceUpdate.length) : 0n;
+
+            // Fetch the **on-chain** Pyth update fee instead of hardcoding it.
+            // Pyth charges per-update bytes which varies; sending too little
+            // makes the AMM revert with `AMM: pyth fee`.
+            let fee = 0n;
+            if (priceUpdate.length > 0) {
+                if (publicClient) {
+                    try {
+                        fee = (await publicClient.readContract({
+                            address: PYTH_CONTRACT_ADDRESS,
+                            abi: PYTH_ABI,
+                            functionName: 'getUpdateFee',
+                            args: [priceUpdate as readonly `0x${string}`[]],
+                        })) as bigint;
+                        // 20% safety buffer in case of rounding / mempool drift.
+                        fee = (fee * 120n) / 100n;
+                    } catch {
+                        fee = getPythUpdateFee(priceUpdate.length);
+                    }
+                } else {
+                    fee = getPythUpdateFee(priceUpdate.length);
+                }
+            }
 
             const amountBN = parseUnits(amountIn, decimalsIn);
+
+            console.log('[pythSwap] sending', {
+                fromToken,
+                toToken,
+                amountIn,
+                fee: fee.toString(),
+                priceUpdates: priceUpdate.length,
+            });
 
             await send({
                 to: OBSCURA_AMM_ADDRESS,
@@ -81,6 +114,7 @@ export function usePythSwap(): UsePythSwapResult {
             });
             setSuccess(true);
         } catch (err) {
+            console.error('[pythSwap] execute failed', err);
             const errorMsg = err instanceof Error ? err : new Error('Unknown error');
             setError(errorMsg);
             throw errorMsg;
