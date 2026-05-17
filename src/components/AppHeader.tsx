@@ -2,6 +2,7 @@ import React from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useNavigate } from 'react-router-dom';
 import CircleWalletButton from './CircleWalletButton';
+import WakeUpOracle from './WakeUpOracle';
 
 const AppHeader: React.FC = () => {
   const navigate = useNavigate();
@@ -55,6 +56,7 @@ const AppHeader: React.FC = () => {
           Faucet
         </a>
 
+        <WakeUpOracle />
         <CircleWalletButton />
         <ConnectButton />
       </div>

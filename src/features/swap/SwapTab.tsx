@@ -25,6 +25,7 @@ import { useTokenBalance } from '../../hooks/useTokenBalance';
 import { useAMMQuote } from '../../hooks/useAMMQuote';
 import { useSmartRoute } from '../../hooks/useSmartRoute';
 import { usePythSwap } from '../../hooks/usePythSwap';
+import { usePythUpdater } from '../../hooks/usePythUpdater';
 import { addActivity } from '../../lib/fluxMock';
 import { isRfqAvailable, quoteRemainingMs } from '../../lib/rfqMaker';
 import NanopayBadge from './NanopayBadge';
@@ -236,6 +237,26 @@ const SwapTab: React.FC = () => {
     isSuccess: isPythSuccess,
     hash: pythHash,
   } = usePythSwap();
+
+  // Standalone "wake up oracle" pusher used when the AMM quote returns 0
+  // because Pyth feeds went stale. Reads the on-chain fee, fetches Hermes
+  // updates, calls updatePriceFeeds — no swap involved.
+  const {
+    push: pushPyth,
+    isPending: isPythUpdaterPending,
+    isConfirming: isPythUpdaterConfirming,
+    isSuccess: isPythUpdaterSuccess,
+    error: pythUpdaterError,
+  } = usePythUpdater();
+  const isPythUpdating = isPythUpdaterPending || isPythUpdaterConfirming;
+
+  // After a successful push, refetch the AMM quote so the user can swap.
+  useEffect(() => {
+    if (isPythUpdaterSuccess) {
+      ammQuote.refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPythUpdaterSuccess]);
 
   const activeHash = pythHash || swapHash;
   const isAnyPending = isSwapPending || isPythPending;
@@ -708,12 +729,40 @@ const SwapTab: React.FC = () => {
             Connect wallet to swap
           </button>
         ) : !ammQuote.hasLiquidity && amount > 0 ? (
-          <button
-            style={{ ...btnStyle('ghost'), cursor: 'not-allowed', borderColor: 'rgba(255,85,119,0.4)', color: '#FF5577' }}
-            disabled
-          >
-            Insufficient liquidity
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              style={{ ...btnStyle('ghost'), cursor: 'not-allowed', borderColor: 'rgba(255,170,80,0.4)', color: '#FFC454' }}
+              disabled
+            >
+              Pyth oracle stale
+            </button>
+            <button
+              onClick={async () => {
+                const tx = await pushPyth();
+                if (tx) {
+                  // Refetch the AMM quote after the push confirms.
+                  setTimeout(() => ammQuote.refetch(), 2000);
+                }
+              }}
+              disabled={isPythUpdating}
+              style={{
+                ...btnStyle('primary'),
+                background: 'rgba(230,201,121,0.12)',
+                borderColor: '#E6C979',
+                color: '#FFD86B',
+                opacity: isPythUpdating ? 0.6 : 1,
+              }}
+            >
+              {isPythUpdating ? 'Waking up oracle…' : 'Wake up Pyth oracle (one-click)'}
+            </button>
+            <div style={{ fontSize: '0.7rem', color: G.dim, textAlign: 'center', lineHeight: 1.5 }}>
+              {pythUpdaterError ? (
+                <span style={{ color: '#FF7777' }}>{pythUpdaterError}</span>
+              ) : (
+                'Quote is zero because no one has pushed Pyth prices to Arc recently. Click above to fetch fresh prices from Hermes and push them on-chain. ~$0.001 in USDC gas.'
+              )}
+            </div>
+          </div>
         ) : needsApproval ? (
           <button
             onClick={handleApprove}
