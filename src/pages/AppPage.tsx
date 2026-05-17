@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useAccount, useWriteContract } from 'wagmi';
 import { useSearchParams } from 'react-router-dom';
 import AppHeader from '../components/AppHeader';
 import AppTabs, { TabId } from '../components/AppTabs';
@@ -14,6 +13,8 @@ import SwapAgent from '../features/swap/SwapAgent';
 import ShieldTab from '../features/shield/ShieldTab';
 import { addActivity } from '../lib/fluxMock';
 import { useLiveActivitySync } from '../hooks/useLiveActivitySync';
+import { useEffectiveAccount } from '../hooks/useEffectiveAccount';
+import { useUnifiedSendTx } from '../hooks/useUnifiedSendTx';
 import { ERC20_ABI } from '../config/dexConfig';
 import { MOCK_TOKENS } from '../config/arc';
 
@@ -33,12 +34,45 @@ const AppPage: React.FC = () => {
     : 'portfolio';
 
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
-  const { address, isConnected } = useAccount();
-  const { writeContract } = useWriteContract();
+  const { address, isConnected } = useEffectiveAccount();
+  const { send } = useUnifiedSendTx();
 
-  const handleTabChange = (tab: TabId) => {
-    setActiveTab(tab);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleFaucetClick = async () => {
+    if (!isConnected || !address) {
+      alert('Please connect your wallet (or sign in with Circle Passkey) first.');
+      return;
+    }
+
+    // Cycle through mock-asset faucets so users can claim each in turn.
+    // Index is persisted in localStorage so subsequent clicks pick the next one.
+    const idx = Number(localStorage.getItem('obscura:faucetIdx') || '0') % FAUCET_TOKENS.length;
+    const sym = FAUCET_TOKENS[idx];
+    localStorage.setItem('obscura:faucetIdx', String((idx + 1) % FAUCET_TOKENS.length));
+
+    const token = MOCK_TOKENS[sym];
+    if (!token || token.address === '0x0000000000000000000000000000000000000000') {
+      alert(
+        'Mock tokens are not deployed yet. Run `npm run deploy:arc` first.\n\n' +
+        'For USDC (the gas token), use https://faucet.circle.com (Arc Testnet).'
+      );
+      return;
+    }
+
+    try {
+      // The MockToken faucet is `mint()` (no args, mints to msg.sender). For
+      // EOA signers msg.sender == user. For Circle Smart Accounts msg.sender
+      // is the smart account, so the minted balance lands on the smart
+      // account address — which is exactly what we want.
+      await send({
+        to: token.address,
+        abi: ERC20_ABI,
+        functionName: 'mint',
+        args: [],
+      });
+      addActivity({ type: 'faucet', description: `Minted mock ${sym} from faucet` });
+    } catch (e) {
+      console.error('Faucet minting failed', e);
+    }
   };
 
   const renderTabContent = () => {

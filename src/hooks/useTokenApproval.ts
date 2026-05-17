@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useState, useEffect, useCallback } from 'react';
+import { useReadContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits } from 'viem';
 import { ERC20_ABI } from '../config/dexConfig';
 import { OBSCURA_AMM_ADDRESS } from '../config/arc';
+import { useEffectiveAccount } from './useEffectiveAccount';
+import { useUnifiedSendTx } from './useUnifiedSendTx';
 
 /**
  * Track ERC-20 allowance vs a given spender (default: ObscuraAMM) and expose
- * an `approve` button. Decimals must be passed because USDC on Arc is 6 dec.
+ * an `approve` button. Routes through whichever wallet is active (Circle
+ * Passkey smart account or RainbowKit EOA). Decimals must be passed because
+ * USDC on Arc is 6 dec.
  */
 export function useTokenApproval(
     tokenAddress: string | undefined,
@@ -14,8 +18,11 @@ export function useTokenApproval(
     decimals: number = 18,
     spenderAddress?: `0x${string}`
 ) {
-    const { address } = useAccount();
+    const { address } = useEffectiveAccount();
     const [needsApproval, setNeedsApproval] = useState(false);
+    const [approvalHash, setApprovalHash] = useState<`0x${string}` | undefined>();
+    const [isApprovePending, setApprovePending] = useState(false);
+    const [approveError, setApproveError] = useState<unknown>(null);
     const spender = spenderAddress || OBSCURA_AMM_ADDRESS;
 
     const { data: allowance, refetch: refetchAllowance } = useReadContract({
@@ -29,18 +36,13 @@ export function useTokenApproval(
     });
 
     const {
-        writeContract: approve,
-        data: approvalHash,
-        isPending: isApprovePending,
-        error: approveError,
-    } = useWriteContract();
-
-    const {
         isLoading: isApprovalConfirming,
         isSuccess: isApprovalConfirmed,
     } = useWaitForTransactionReceipt({
         hash: approvalHash,
     });
+
+    const { send } = useUnifiedSendTx();
 
     useEffect(() => {
         if (!amount || !tokenAddress) {
@@ -65,20 +67,26 @@ export function useTokenApproval(
         }
     }, [isApprovalConfirmed, refetchAllowance]);
 
-    const handleApprove = () => {
+    const handleApprove = useCallback(async () => {
         if (!tokenAddress || !amount) return;
+        setApproveError(null);
+        setApprovePending(true);
         try {
             const amountBN = parseUnits(amount, decimals);
-            approve({
-                address: tokenAddress as `0x${string}`,
+            const { txHash } = await send({
+                to: tokenAddress as `0x${string}`,
                 abi: ERC20_ABI,
                 functionName: 'approve',
                 args: [spender, amountBN],
             });
+            setApprovalHash(txHash);
         } catch (error) {
             console.error('Approval error:', error);
+            setApproveError(error);
+        } finally {
+            setApprovePending(false);
         }
-    };
+    }, [send, tokenAddress, amount, decimals, spender]);
 
     return {
         needsApproval,

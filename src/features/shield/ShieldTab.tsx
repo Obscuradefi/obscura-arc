@@ -1,8 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  useAccount,
   useReadContract,
-  useWriteContract,
   useWaitForTransactionReceipt,
   useReadContracts,
 } from 'wagmi';
@@ -10,6 +8,8 @@ import { parseUnits, formatUnits, keccak256, stringToHex } from 'viem';
 import { motion } from 'framer-motion';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { addActivity } from '../../lib/fluxMock';
+import { useEffectiveAccount } from '../../hooks/useEffectiveAccount';
+import { useUnifiedSendTx } from '../../hooks/useUnifiedSendTx';
 import {
   SHIELD_ABI,
   SHIELD_CONTRACT_ADDRESS,
@@ -65,7 +65,7 @@ interface ShieldEntryRow {
 }
 
 const ShieldTab: React.FC = () => {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected } = useEffectiveAccount();
 
   const [tokenSym, setTokenSym] = useState<string>('USDC');
   const [shieldAmount, setShieldAmount] = useState('');
@@ -136,7 +136,7 @@ const ShieldTab: React.FC = () => {
   }, [entriesQuery.data]);
 
   // ---------- writes ----------
-  const { writeContract, data: hash } = useWriteContract();
+  const { send, lastHash: hash, isPending: isWriting } = useUnifiedSendTx();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
 
   if (isConfirmed) {
@@ -146,54 +146,54 @@ const ShieldTab: React.FC = () => {
     entriesQuery.refetch();
   }
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!shieldAmount || isNaN(Number(shieldAmount)) || !asset?.deployed) return;
-    writeContract({
-      address: tokenAddress,
-      abi: ERC20_ABI,
-      functionName: 'approve',
-      args: [SHIELD_CONTRACT_ADDRESS, parseUnits(shieldAmount, tokenDecimals)],
-    });
+    try {
+      await send({
+        to: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [SHIELD_CONTRACT_ADDRESS, parseUnits(shieldAmount, tokenDecimals)],
+      });
+    } catch (e) {
+      console.error('Shield approve failed', e);
+    }
   };
 
-  const handleShield = () => {
+  const handleShield = async () => {
     if (!shieldAmount || isNaN(Number(shieldAmount)) || !asset?.deployed) return;
     const salt = keccak256(stringToHex(`obscura:${address}:${Date.now()}:${Math.random()}`));
-    writeContract(
-      {
-        address: SHIELD_CONTRACT_ADDRESS,
+    try {
+      await send({
+        to: SHIELD_CONTRACT_ADDRESS,
         abi: SHIELD_ABI,
         functionName: 'shield',
         args: [tokenAddress, parseUnits(shieldAmount, tokenDecimals), privacyLevel, salt],
-      },
-      {
-        onSuccess: () => {
-          addActivity({
-            type: 'shield',
-            description: `Shielded ${shieldAmount} ${tokenSym} (${PRIVACY_LEVELS[privacyLevel].label})`,
-          });
-          setShieldAmount('');
-        },
-      }
-    );
+      });
+      addActivity({
+        type: 'shield',
+        description: `Shielded ${shieldAmount} ${tokenSym} (${PRIVACY_LEVELS[privacyLevel].label})`,
+      });
+      setShieldAmount('');
+    } catch (e) {
+      console.error('Shield failed', e);
+    }
   };
 
-  const handleUnshield = (entryId: number) => {
+  const handleUnshield = async (entryId: number) => {
     if (!asset?.deployed) return;
     const salt = keccak256(stringToHex(`obscura:unshield:${address}:${entryId}`));
-    writeContract(
-      {
-        address: SHIELD_CONTRACT_ADDRESS,
+    try {
+      await send({
+        to: SHIELD_CONTRACT_ADDRESS,
         abi: SHIELD_ABI,
         functionName: 'unshield',
         args: [tokenAddress, BigInt(entryId), salt],
-      },
-      {
-        onSuccess: () => {
-          addActivity({ type: 'unshield', description: `Unshielded ${tokenSym} entry #${entryId}` });
-        },
-      }
-    );
+      });
+      addActivity({ type: 'unshield', description: `Unshielded ${tokenSym} entry #${entryId}` });
+    } catch (e) {
+      console.error('Unshield failed', e);
+    }
   };
 
   if (!isConnected) {

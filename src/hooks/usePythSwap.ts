@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits } from 'viem';
 import { OBSCURA_AMM_ABI } from '../config/dexConfig';
 import { OBSCURA_AMM_ADDRESS } from '../config/arc';
 import { PYTH_PRICE_IDS } from '../config/priceFeeds';
 import { getPythPriceUpdate, getPythUpdateFee } from '../lib/pythClient';
+import { useUnifiedSendTx } from './useUnifiedSendTx';
 
 export interface UsePythSwapResult {
     executePythSwap: (params: {
@@ -28,21 +28,19 @@ export interface UsePythSwapResult {
  * `swapWithPriceUpdate` on ObscuraAMM so the trade settles at the most recent
  * oracle price. The user pays the per-update fee in native USDC (msg.value).
  *
- * Use this for high-value swaps where you want guaranteed price freshness.
- * For routine swaps the regular `swap()` path on ObscuraAMM is cheaper because
- * it relies on whatever feed update was published most recently.
+ * Routes through `useUnifiedSendTx` so it works for both:
+ *   - EOA wallets (RainbowKit / MetaMask): submitted as a normal payable tx.
+ *   - Circle Passkey smart accounts: submitted as a sponsored user
+ *     operation. The paymaster covers gas; the Pyth fee comes out of the
+ *     smart account's USDC balance.
+ *
+ * This is the **default** swap path because every trade implicitly keeps
+ * Pyth feeds fresh — no separate "wake up oracle" step needed in normal use.
  */
 export function usePythSwap(): UsePythSwapResult {
     const [error, setError] = useState<Error | null>(null);
-
-    const {
-        writeContract,
-        data: hash,
-        isPending,
-        error: writeError,
-    } = useWriteContract();
-
-    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+    const [success, setSuccess] = useState(false);
+    const { send, isPending, isConfirming, lastHash } = useUnifiedSendTx();
 
     const executePythSwap = async ({
         fromToken,
@@ -55,6 +53,7 @@ export function usePythSwap(): UsePythSwapResult {
     }: Parameters<UsePythSwapResult['executePythSwap']>[0]) => {
         try {
             setError(null);
+            setSuccess(false);
 
             const ids: string[] = [];
             const symA = (PYTH_PRICE_IDS as Record<string, string>)[fromSymbol];
@@ -62,26 +61,25 @@ export function usePythSwap(): UsePythSwapResult {
             if (symA) ids.push(symA);
             if (symB) ids.push(symB);
 
-            // If neither leg has a Pyth feed (e.g. USDC on either side and the
-            // counter-asset isn't tracked) fall back to plain swap().
+            // If neither leg has a Pyth feed (e.g. USDC↔USDC), fall back to
+            // the plain swap() path — `swapWithPriceUpdate` with empty data
+            // is rejected by the contract.
             const priceUpdate = ids.length > 0 ? await getPythPriceUpdate(ids) : [];
-            const fee = getPythUpdateFee(priceUpdate.length);
+            const fee = priceUpdate.length > 0 ? getPythUpdateFee(priceUpdate.length) : 0n;
 
             const amountBN = parseUnits(amountIn, decimalsIn);
 
-            writeContract({
-                address: OBSCURA_AMM_ADDRESS,
+            await send({
+                to: OBSCURA_AMM_ADDRESS,
                 abi: OBSCURA_AMM_ABI,
-                functionName: 'swapWithPriceUpdate',
-                args: [
-                    fromToken,
-                    toToken,
-                    amountBN,
-                    minAmountOut,
-                    priceUpdate as readonly `0x${string}`[],
-                ],
+                functionName: priceUpdate.length > 0 ? 'swapWithPriceUpdate' : 'swap',
+                args:
+                    priceUpdate.length > 0
+                        ? [fromToken, toToken, amountBN, minAmountOut, priceUpdate]
+                        : [fromToken, toToken, amountBN, minAmountOut],
                 value: fee,
             });
+            setSuccess(true);
         } catch (err) {
             const errorMsg = err instanceof Error ? err : new Error('Unknown error');
             setError(errorMsg);
@@ -93,8 +91,8 @@ export function usePythSwap(): UsePythSwapResult {
         executePythSwap,
         isPending,
         isConfirming,
-        isSuccess,
-        error: error || writeError || null,
-        hash,
+        isSuccess: success,
+        error,
+        hash: lastHash,
     };
 }

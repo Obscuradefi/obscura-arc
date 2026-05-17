@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits } from 'viem';
 import { motion } from 'framer-motion';
 import { OBSCURA_AMM_ABI } from '../../config/dexConfig';
@@ -26,6 +26,8 @@ import { useAMMQuote } from '../../hooks/useAMMQuote';
 import { useSmartRoute } from '../../hooks/useSmartRoute';
 import { usePythSwap } from '../../hooks/usePythSwap';
 import { usePythUpdater } from '../../hooks/usePythUpdater';
+import { useEffectiveAccount } from '../../hooks/useEffectiveAccount';
+import { useUnifiedSendTx } from '../../hooks/useUnifiedSendTx';
 import { addActivity } from '../../lib/fluxMock';
 import { isRfqAvailable, quoteRemainingMs } from '../../lib/rfqMaker';
 import NanopayBadge from './NanopayBadge';
@@ -152,9 +154,18 @@ const SwapTab: React.FC = () => {
   const [inputAmount, setInputAmount] = useState('');
   const [slippage, setSlippage] = useState('0.5');
   const [isCustomSlippage, setIsCustomSlippage] = useState(false);
-  const usePythFresh = true;
 
-  const { address, isConnected } = useAccount();
+  // Use the user's effective account: Circle Smart Account (passkey) takes
+  // priority, with EOA as fallback. This is the single source of truth so
+  // balance reads, approvals, and tx submission all target the right address.
+  const { address, isConnected, source: accountSource } = useEffectiveAccount();
+  const isPasskey = accountSource === 'circle';
+
+  // Pyth-fresh path: every swap implicitly pushes a fresh Pyth update before
+  // executing, so feeds never go stale during normal use. Works for both
+  // EOA (wagmi) and passkey (Circle bundler) signers via the unified sender.
+  // The Pyth fee (~$0.001 USDC) comes out of the user's wallet either way.
+  const usePythFresh = true;
 
   const fromAssetData = getAsset(fromAsset);
   const toAssetData = getAsset(toAsset);
@@ -225,10 +236,9 @@ const SwapTab: React.FC = () => {
     approvalSpender
   );
 
-  const { writeContract: execSwap, data: swapHash, isPending: isSwapPending } = useWriteContract();
-  const { isLoading: isSwapConfirming, isSuccess: isSwapConfirmed } = useWaitForTransactionReceipt({
-    hash: swapHash,
-  });
+  // Unified tx sender — picks Circle bundler when passkey is active, wagmi
+  // otherwise. Returns a uniform `txHash` regardless.
+  const unified = useUnifiedSendTx();
 
   const {
     executePythSwap,
@@ -258,10 +268,10 @@ const SwapTab: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPythUpdaterSuccess]);
 
-  const activeHash = pythHash || swapHash;
-  const isAnyPending = isSwapPending || isPythPending;
-  const isAnyConfirming = isSwapConfirming || isPythConfirming;
-  const isAnyConfirmed = isSwapConfirmed || isPythSuccess;
+  const activeHash = pythHash || unified.lastHash;
+  const isAnyPending = unified.isPending || isPythPending;
+  const isAnyConfirming = unified.isConfirming || isPythConfirming;
+  const isAnyConfirmed = (unified.lastHash && !unified.isPending && !unified.isConfirming) || isPythSuccess;
 
   const handleFlip = () => {
     const tmp = fromAsset;
@@ -270,15 +280,16 @@ const SwapTab: React.FC = () => {
     setInputAmount('');
   };
 
-  const handleExecuteSwap = () => {
+  const handleExecuteSwap = async () => {
     if (!fromAssetData?.contractAddress || !toAssetData?.contractAddress || !inputAmount) return;
 
     // RFQ path: submit the maker-signed quote to ObscuraRFQ.settle().
+    // Routes through `unified` so it works for both EOA and Passkey signers.
     if (useRFQ && smartQuote?.rfq) {
       const q = smartQuote.rfq;
-      execSwap(
-        {
-          address: OBSCURA_RFQ_ADDRESS,
+      try {
+        await unified.send({
+          to: OBSCURA_RFQ_ADDRESS,
           abi: OBSCURA_RFQ_ABI,
           functionName: 'settle',
           args: [
@@ -292,19 +303,17 @@ const SwapTab: React.FC = () => {
             q.expiry,
             q.signature,
           ],
-        },
-        {
-          onSuccess: () => {
-            addActivity({
-              type: 'swap',
-              description: `RFQ settled: ${inputAmount} ${fromAsset} → ${toAsset} via ${q.makerLabel}`,
-              fromAsset,
-              toAsset,
-              amount,
-            });
-          },
-        }
-      );
+        });
+        addActivity({
+          type: 'swap',
+          description: `RFQ settled: ${inputAmount} ${fromAsset} → ${toAsset} via ${q.makerLabel}`,
+          fromAsset,
+          toAsset,
+          amount,
+        });
+      } catch (e) {
+        console.error('RFQ settle failed', e);
+      }
       return;
     }
 
@@ -315,34 +324,38 @@ const SwapTab: React.FC = () => {
         ? ((ammQuote.amountOutBN as bigint) * BigInt(Math.floor((1 - slipPct) * 10_000))) / 10_000n
         : 0n;
 
+    // Pyth-fresh path: only available for EOA signers because it carries
+    // msg.value (Pyth update fee) which Circle's bundler doesn't forward
+    // through user operations the way an EOA tx does.
     if (usePythFresh) {
-      // Pull fresh Pyth updates from Hermes, then settle on-chain at that
-      // price. Costs the per-update fee but guarantees a live oracle quote.
-      executePythSwap({
-        fromToken: fromAssetData.contractAddress as `0x${string}`,
-        toToken: toAssetData.contractAddress as `0x${string}`,
-        fromSymbol: fromAsset,
-        toSymbol: toAsset,
-        amountIn: inputAmount,
-        decimalsIn: fromAssetData.decimals,
-        minAmountOut,
-      })
-        .then(() => {
-          addActivity({
-            type: 'swap',
-            description: `Swapped ${inputAmount} ${fromAsset} to ${toAsset} (Pyth-fresh AMM)`,
-            fromAsset,
-            toAsset,
-            amount,
-          });
-        })
-        .catch((e) => console.error('Pyth swap failed', e));
+      try {
+        await executePythSwap({
+          fromToken: fromAssetData.contractAddress as `0x${string}`,
+          toToken: toAssetData.contractAddress as `0x${string}`,
+          fromSymbol: fromAsset,
+          toSymbol: toAsset,
+          amountIn: inputAmount,
+          decimalsIn: fromAssetData.decimals,
+          minAmountOut,
+        });
+        addActivity({
+          type: 'swap',
+          description: `Swapped ${inputAmount} ${fromAsset} to ${toAsset} (Pyth-fresh AMM)`,
+          fromAsset,
+          toAsset,
+          amount,
+        });
+      } catch (e) {
+        console.error('Pyth swap failed', e);
+      }
       return;
     }
 
-    execSwap(
-      {
-        address: OBSCURA_AMM_ADDRESS,
+    // Plain AMM swap, routed through the unified sender so passkey-signed
+    // smart accounts settle as a gasless user operation.
+    try {
+      await unified.send({
+        to: OBSCURA_AMM_ADDRESS,
         abi: OBSCURA_AMM_ABI,
         functionName: 'swap',
         args: [
@@ -351,19 +364,17 @@ const SwapTab: React.FC = () => {
           parseUnits(inputAmount, fromAssetData.decimals),
           minAmountOut,
         ],
-      },
-      {
-        onSuccess: () => {
-          addActivity({
-            type: 'swap',
-            description: `Swapped ${inputAmount} ${fromAsset} to ${toAsset} (AMM)`,
-            fromAsset,
-            toAsset,
-            amount,
-          });
-        },
-      }
-    );
+      });
+      addActivity({
+        type: 'swap',
+        description: `Swapped ${inputAmount} ${fromAsset} to ${toAsset} (AMM${isPasskey ? ' · gasless' : ''})`,
+        fromAsset,
+        toAsset,
+        amount,
+      });
+    } catch (e) {
+      console.error('AMM swap failed', e);
+    }
   };
 
   useEffect(() => {

@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-    useAccount,
     useReadContracts,
-    useWriteContract,
     useWaitForTransactionReceipt,
     useReadContract,
 } from 'wagmi';
 import { formatUnits, parseUnits } from 'viem';
+import { useEffectiveAccount } from '../../hooks/useEffectiveAccount';
+import { useUnifiedSendTx } from '../../hooks/useUnifiedSendTx';
 import { FLUX_ASSETS } from '../../data/fluxAssets';
 import { OBSCURA_AMM_ABI, ERC20_ABI } from '../../config/dexConfig';
 import {
@@ -65,7 +65,7 @@ const PoolCard: React.FC<PoolCardProps> = ({
     const [amountUSDC, setAmountUSDC] = useState('');
     const [sharesToRemove, setSharesToRemove] = useState('');
 
-    const { writeContract, data: hash, isPending } = useWriteContract();
+    const { send, lastHash: hash, isPending } = useUnifiedSendTx();
     const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
 
     // Asset balance + allowance
@@ -128,31 +128,39 @@ const PoolCard: React.FC<PoolCardProps> = ({
         }
     };
 
-    const handleApproveAsset = () => {
+    const handleApproveAsset = async () => {
         if (!amountAsset || !asset.contractAddress) return;
-        writeContract({
-            address: asset.contractAddress as `0x${string}`,
-            abi: ERC20_ABI,
-            functionName: 'approve',
-            args: [OBSCURA_AMM_ADDRESS, parseUnits(amountAsset, asset.decimals)],
-        });
+        try {
+            await send({
+                to: asset.contractAddress as `0x${string}`,
+                abi: ERC20_ABI,
+                functionName: 'approve',
+                args: [OBSCURA_AMM_ADDRESS, parseUnits(amountAsset, asset.decimals)],
+            });
+        } catch (e) {
+            console.error('Approve asset failed', e);
+        }
     };
 
-    const handleApproveUSDC = () => {
+    const handleApproveUSDC = async () => {
         if (!amountUSDC) return;
-        writeContract({
-            address: ARC_USDC_ADDRESS,
-            abi: ERC20_ABI,
-            functionName: 'approve',
-            args: [OBSCURA_AMM_ADDRESS, parseUnits(amountUSDC, ARC_USDC_DECIMALS)],
-        });
+        try {
+            await send({
+                to: ARC_USDC_ADDRESS,
+                abi: ERC20_ABI,
+                functionName: 'approve',
+                args: [OBSCURA_AMM_ADDRESS, parseUnits(amountUSDC, ARC_USDC_DECIMALS)],
+            });
+        } catch (e) {
+            console.error('Approve USDC failed', e);
+        }
     };
 
-    const handleAddLiquidity = () => {
+    const handleAddLiquidity = async () => {
         if (!amountAsset || !amountUSDC || !asset.contractAddress) return;
-        writeContract(
-            {
-                address: OBSCURA_AMM_ADDRESS,
+        try {
+            await send({
+                to: OBSCURA_AMM_ADDRESS,
                 abi: OBSCURA_AMM_ABI,
                 functionName: 'addLiquidity',
                 args: [
@@ -160,44 +168,40 @@ const PoolCard: React.FC<PoolCardProps> = ({
                     parseUnits(amountAsset, asset.decimals),
                     parseUnits(amountUSDC, ARC_USDC_DECIMALS),
                 ],
-            },
-            {
-                onSuccess: () => {
-                    addActivity({
-                        type: 'liquidity',
-                        description: `Added ${amountAsset} ${asset.symbol} + ${amountUSDC} USDC liquidity`,
-                    });
-                    setAmountAsset('');
-                    setAmountUSDC('');
-                    setMode('idle');
-                },
-            }
-        );
+            });
+            addActivity({
+                type: 'liquidity',
+                description: `Added ${amountAsset} ${asset.symbol} + ${amountUSDC} USDC liquidity`,
+            });
+            setAmountAsset('');
+            setAmountUSDC('');
+            setMode('idle');
+        } catch (e) {
+            console.error('Add liquidity failed', e);
+        }
     };
 
-    const handleRemoveLiquidity = () => {
+    const handleRemoveLiquidity = async () => {
         if (!sharesToRemove || !asset.contractAddress) return;
-        writeContract(
-            {
-                address: OBSCURA_AMM_ADDRESS,
+        try {
+            await send({
+                to: OBSCURA_AMM_ADDRESS,
                 abi: OBSCURA_AMM_ABI,
                 functionName: 'removeLiquidity',
                 args: [
                     asset.contractAddress as `0x${string}`,
                     parseUnits(sharesToRemove, 18),
                 ],
-            },
-            {
-                onSuccess: () => {
-                    addActivity({
-                        type: 'liquidity',
-                        description: `Removed ${sharesToRemove} ${asset.symbol} LP shares`,
-                    });
-                    setSharesToRemove('');
-                    setMode('idle');
-                },
-            }
-        );
+            });
+            addActivity({
+                type: 'liquidity',
+                description: `Removed ${sharesToRemove} ${asset.symbol} LP shares`,
+            });
+            setSharesToRemove('');
+            setMode('idle');
+        } catch (e) {
+            console.error('Remove liquidity failed', e);
+        }
     };
 
     const isProcessing = isPending || isConfirming;
@@ -522,7 +526,7 @@ const PoolCard: React.FC<PoolCardProps> = ({
 };
 
 const LiquidityTab: React.FC = () => {
-    const { address } = useAccount();
+    const { address } = useEffectiveAccount();
     // USDC is the quote, not a pool side — exclude it.
     const poolAssets = FLUX_ASSETS.filter((a) => a.deployed && !a.isQuote);
 
