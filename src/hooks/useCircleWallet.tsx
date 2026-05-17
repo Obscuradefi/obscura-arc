@@ -70,6 +70,28 @@ export const CircleWalletProvider: React.FC<{ children: React.ReactNode }> = ({
             const s = await registerCircleWallet(username);
             setSession(s);
         } catch (e: any) {
+            // Username already taken at Circle. Auto-fallback to login flow
+            // so the user doesn't have to switch button — same passkey, same
+            // smart account, just a different WebAuthn mode.
+            const msg = String(e?.message ?? e ?? '').toLowerCase();
+            const isDuplicate =
+                msg.includes('username is duplicated') ||
+                msg.includes('already registered') ||
+                e?.name === 'InvalidStateError';
+
+            if (isDuplicate) {
+                console.log('[circle] username taken, falling back to login');
+                try {
+                    const s = await loginCircleWallet(username);
+                    setSession(s);
+                    setError(null);
+                    return;
+                } catch (loginErr: any) {
+                    setError(friendlyError(loginErr));
+                    throw loginErr;
+                }
+            }
+
             setError(friendlyError(e));
             throw e;
         } finally {
@@ -124,6 +146,8 @@ function friendlyError(e: any): string {
     if (name === 'NotAllowedError') return 'Passkey prompt was cancelled.';
     if (name === 'SecurityError') return 'Passkey domain mismatch. Check your Circle Console settings.';
     if (name === 'InvalidStateError') return 'A passkey for this username already exists. Try logging in instead.';
+    if (msg.includes('username is duplicated') || msg.includes('username already taken'))
+        return 'Username already exists. Sign in with the existing passkey instead.';
     if (msg.includes('155507')) return 'Modular Wallets do not yet support this chain.';
     if (msg.includes('155509')) return 'A paymaster policy is required in the Circle Console.';
     return msg;
