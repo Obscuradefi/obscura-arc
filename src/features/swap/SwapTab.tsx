@@ -809,11 +809,11 @@ const SwapTab: React.FC = () => {
             </a>
           </div>
         )}
-        {swapHash && (
+        {unified.lastHash && unified.lastSource && (
           <div style={{ marginTop: 6, textAlign: 'center', fontSize: '0.75rem', color: G.dim }}>
-            Swap tx:{' '}
+            {unified.lastSource === 'circle' ? 'Gasless tx' : 'Swap tx'}:{' '}
             <a
-              href={arcTxUrl(swapHash)}
+              href={arcTxUrl(unified.lastHash)}
               target="_blank"
               rel="noopener noreferrer"
               style={{ color: G.green }}
