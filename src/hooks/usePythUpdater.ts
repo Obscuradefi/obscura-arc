@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
 import {
-    useAccount,
     usePublicClient,
     useWriteContract,
     useWaitForTransactionReceipt,
 } from 'wagmi';
+import { useEffectiveAccount } from './useEffectiveAccount';
+import { useUnifiedSendTx } from './useUnifiedSendTx';
 import { PYTH_ABI } from '../config/pythAbi';
 import { PYTH_CONTRACT_ADDRESS } from '../config/arc';
 import { PYTH_PRICE_IDS } from '../config/priceFeeds';
@@ -33,18 +34,12 @@ export interface UsePythUpdaterResult {
  * never overpay.
  */
 export function usePythUpdater(): UsePythUpdaterResult {
-    const { address } = useAccount();
+    const { address } = useEffectiveAccount();
     const publicClient = usePublicClient();
     const [error, setError] = useState<string | null>(null);
+    const { send, lastHash, isPending } = useUnifiedSendTx();
 
-    const {
-        writeContractAsync,
-        data: hash,
-        isPending,
-        error: writeError,
-    } = useWriteContract();
-
-    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: lastHash });
 
     const push = useCallback(
         async (symbols: readonly string[] = ROUTINE_SYMBOLS): Promise<`0x${string}` | null> => {
@@ -82,22 +77,22 @@ export function usePythUpdater(): UsePythUpdaterResult {
                     args: [updates],
                 })) as bigint;
 
-                const tx = await writeContractAsync({
-                    address: PYTH_CONTRACT_ADDRESS,
+                const tx = await send({
+                    to: PYTH_CONTRACT_ADDRESS,
                     abi: PYTH_ABI,
                     functionName: 'updatePriceFeeds',
                     args: [updates],
                     value: fee,
                 });
 
-                return tx;
+                return tx.txHash;
             } catch (e: any) {
                 console.error('[pyth-updater]', e);
                 setError(e?.shortMessage ?? e?.message ?? 'Push failed');
                 return null;
             }
         },
-        [address, publicClient, writeContractAsync]
+        [address, publicClient, send]
     );
 
     return {
@@ -105,7 +100,7 @@ export function usePythUpdater(): UsePythUpdaterResult {
         isPending,
         isConfirming,
         isSuccess,
-        error: error || writeError?.message || null,
-        hash,
+        error,
+        hash: lastHash,
     };
 }

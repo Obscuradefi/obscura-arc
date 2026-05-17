@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useAccount, useReadContracts } from 'wagmi';
+import { useReadContracts } from 'wagmi';
 import { formatUnits } from 'viem';
 import { motion } from 'framer-motion';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useEffectiveAccount } from '../../hooks/useEffectiveAccount';
 import { getActivityHistory, type SwapActivity } from '../../lib/fluxMock';
 import { FLUX_ASSETS } from '../../data/fluxAssets';
 import { useTokenBalance } from '../../hooks/useTokenBalance';
@@ -16,34 +17,45 @@ import { getMockPrice } from '../../lib/priceOracle';
 import { OBSCURA_AMM_ABI, ERC20_ABI } from '../../config/dexConfig';
 
 const PortfolioTab = ({ onNavigate }: { onNavigate?: (tab: TabId) => void }) => {
-    const { address, isConnected } = useAccount();
+    const { address, isConnected, source } = useEffectiveAccount();
     const [activities, setActivities] = useState<SwapActivity[]>([]);
     const [showEncrypted, setShowEncrypted] = useState(false);
 
     const deployedAssets = FLUX_ASSETS.filter((a) => a.deployed);
 
     // Batch-read encrypted balances and on-chain prices for every deployed asset.
-    const contractsToRead: any[] = [];
-    deployedAssets.forEach((a) => {
-        // Shield balance
-        contractsToRead.push({
-            address: OBSCURA_SHIELD_ADDRESS,
-            abi: SHIELD_ABI,
-            functionName: 'getEncryptedBalance',
-            args: [address as `0x${string}`, a.contractAddress as `0x${string}`],
+    // We only build the query list when the user is connected; passing
+    // `args: [undefined, ...]` to wagmi makes the entire batch fail, which
+    // surfaces as Portfolio rendering blank.
+    const contractsToRead: any[] = useMemo(() => {
+        if (!address) return [];
+        const calls: any[] = [];
+        deployedAssets.forEach((a) => {
+            // Shield balance
+            calls.push({
+                address: OBSCURA_SHIELD_ADDRESS,
+                abi: SHIELD_ABI,
+                functionName: 'getEncryptedBalance',
+                args: [address as `0x${string}`, a.contractAddress as `0x${string}`],
+            });
+            // On-chain Pyth price from AMM (scaled to 1e18)
+            calls.push({
+                address: OBSCURA_AMM_ADDRESS,
+                abi: OBSCURA_AMM_ABI,
+                functionName: 'getPrice',
+                args: [a.contractAddress as `0x${string}`],
+            });
         });
-        // On-chain Pyth price from AMM (scaled to 1e18)
-        contractsToRead.push({
-            address: OBSCURA_AMM_ADDRESS,
-            abi: OBSCURA_AMM_ABI,
-            functionName: 'getPrice',
-            args: [a.contractAddress as `0x${string}`],
-        });
-    });
+        return calls;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [address, deployedAssets.length]);
 
     const multiQueries = useReadContracts({
         contracts: contractsToRead,
-        query: { enabled: !!address && isConnected, refetchInterval: 6000 },
+        query: {
+            enabled: !!address && isConnected && contractsToRead.length > 0,
+            refetchInterval: 6000,
+        },
     });
 
     const encryptedBySymbol: Record<string, number> = {};

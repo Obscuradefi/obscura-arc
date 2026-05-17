@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useAccount } from 'wagmi';
+import { useEffectiveAccount } from '../../hooks/useEffectiveAccount';
 import { formatUnits } from 'viem';
 import {
     getChannelSnapshot,
@@ -15,7 +15,7 @@ import { RFQ_MAKER_ADDRESS } from '../../config/arc';
  * Renders nothing if Nanopay isn't configured.
  */
 const NanopayBadge: React.FC = () => {
-    const { address } = useAccount();
+    const { address } = useEffectiveAccount();
     const [tick, setTick] = useState(0);
 
     useEffect(() => {

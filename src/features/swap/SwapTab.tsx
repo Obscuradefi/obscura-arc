@@ -788,10 +788,14 @@ const SwapTab: React.FC = () => {
             disabled={!amount || isAnyPending || isAnyConfirming}
             style={{ ...btnStyle('primary'), opacity: !amount || isAnyPending || isAnyConfirming ? 0.6 : 1 }}
           >
-            {isAnyPending || isAnyConfirming
-              ? 'Swapping...'
+            {isAnyPending
+              ? isPasskey
+                ? 'Approving with passkey…'
+                : 'Confirming in wallet…'
+              : isAnyConfirming
+              ? 'Settling on Arc…'
               : usePythFresh
-              ? 'Execute swap (Pyth-fresh)'
+              ? `Execute swap${isPasskey ? ' (gasless)' : ' (Pyth-fresh)'}`
               : 'Execute swap'}
           </button>
         )}
