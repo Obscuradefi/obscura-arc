@@ -158,22 +158,48 @@ export async function sendGaslessCall(
         args: call.args as any,
     });
 
-    const userOpHash = await session.bundlerClient.sendUserOperation({
-        calls: [
-            {
-                to: call.to,
-                value: call.value ?? 0n,
-                data,
-            },
-        ],
-        // Sponsor gas via Circle Gas Station. On testnet this is automatic;
-        // on mainnet it requires a paymaster policy in Circle Console.
-        paymaster: true,
+    console.log('[circle] sendUserOperation', {
+        smartAccount: session.address,
+        to: call.to,
+        functionName: call.functionName,
+        value: (call.value ?? 0n).toString(),
     });
+
+    let userOpHash: Hex;
+    try {
+        userOpHash = await session.bundlerClient.sendUserOperation({
+            calls: [
+                {
+                    to: call.to,
+                    value: call.value ?? 0n,
+                    data,
+                },
+            ],
+            // Sponsor gas via Circle Gas Station. On testnet this is automatic;
+            // on mainnet it requires a paymaster policy in Circle Console.
+            paymaster: true,
+        });
+    } catch (e: any) {
+        console.error('[circle] sendUserOperation failed', e);
+        // Re-wrap so the unified error path surfaces a useful message.
+        const reason =
+            e?.shortMessage ||
+            e?.details ||
+            e?.message ||
+            'Unknown bundler error';
+        throw new Error(`Circle bundler: ${reason}`);
+    }
+
+    console.log('[circle] userOpHash', userOpHash);
 
     const receipt = await session.bundlerClient.waitForUserOperationReceipt({
         hash: userOpHash,
     });
+
+    if (!receipt.success) {
+        const reason = (receipt as any).reason ?? 'execution reverted';
+        throw new Error(`Circle userOp failed: ${reason}`);
+    }
 
     return {
         userOpHash,

@@ -813,6 +813,28 @@ const SwapTab: React.FC = () => {
             </a>
           </div>
         )}
+        {unified.error && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: '10px 14px',
+              borderRadius: 10,
+              background: 'rgba(255,85,119,0.08)',
+              border: '1px solid rgba(255,85,119,0.25)',
+              color: '#FFB0BD',
+              fontSize: '0.75rem',
+              lineHeight: 1.55,
+            }}
+          >
+            <strong style={{ color: '#FF8898' }}>Last tx error:</strong> {unified.error}
+            {isPasskey && (
+              <div style={{ marginTop: 6, color: G.dim }}>
+                Tip: smart account needs USDC funded to cover Pyth fee + swap amount.
+                Faucet: https://faucet.circle.com (paste your passkey address).
+              </div>
+            )}
+          </div>
+        )}
         {unified.lastHash && unified.lastSource && (
           <div style={{ marginTop: 6, textAlign: 'center', fontSize: '0.75rem', color: G.dim }}>
             {unified.lastSource === 'circle' ? 'Gasless tx' : 'Swap tx'}:{' '}
