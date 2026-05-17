@@ -16,14 +16,15 @@ import { useLiveActivitySync } from '../hooks/useLiveActivitySync';
 import { useEffectiveAccount } from '../hooks/useEffectiveAccount';
 import { useUnifiedSendTx } from '../hooks/useUnifiedSendTx';
 import { ERC20_ABI } from '../config/dexConfig';
-import { MOCK_TOKENS } from '../config/arc';
+import { MOCK_TOKENS, type MockTokenSymbol } from '../config/arc';
 
 const VALID_TABS: TabId[] = ['shield', 'swap', 'stake', 'portfolio', 'markets', 'liquidity', 'bridge'];
 
 // Mock-token symbols that expose a public mint() faucet on Arc Testnet.
-// USDC is funded from https://faucet.circle.com (real Circle faucet) so it is
-// not part of this list.
-const FAUCET_TOKENS: Array<keyof typeof MOCK_TOKENS> = ['USDT', 'USDe', 'GOLD', 'AAPL', 'MSTR'];
+// USDC + EURC are funded from https://faucet.circle.com (real Circle faucet)
+// so they are not part of this list. Symbols are derived from the live
+// MOCK_TOKENS map so the list stays in sync with the deploy script.
+const FAUCET_TOKENS: MockTokenSymbol[] = Object.keys(MOCK_TOKENS) as MockTokenSymbol[];
 
 const AppPage: React.FC = () => {
   useLiveActivitySync();
@@ -37,9 +38,17 @@ const AppPage: React.FC = () => {
   const { address, isConnected } = useEffectiveAccount();
   const { send } = useUnifiedSendTx();
 
+  const handleTabChange = (tab: TabId) => {
+    setActiveTab(tab);
+  };
+
   const handleFaucetClick = async () => {
     if (!isConnected || !address) {
       alert('Please connect your wallet (or sign in with Circle Passkey) first.');
+      return;
+    }
+    if (FAUCET_TOKENS.length === 0) {
+      alert('No mock tokens deployed yet. Run `npm run deploy:arc` first.');
       return;
     }
 
@@ -91,7 +100,7 @@ const AppPage: React.FC = () => {
     <div style={{ position: 'relative', minHeight: '100vh' }}>
 
       <div className="site-wrapper" style={{ position: 'relative', zIndex: 1 }}>
-        <AppHeader />
+        <AppHeader onFaucetClick={handleFaucetClick} />
 
         <div style={{ paddingTop: 80, minHeight: '100vh' }}>
           <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 24px 0' }}>

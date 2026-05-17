@@ -26,16 +26,26 @@ function decimalsFor(addr: string | undefined): number {
 /**
  * Mirror on-chain swap/shield/unshield events into the local activity log so
  * the portfolio tab feels live. Only events for the connected user are
- * surfaced; we de-dupe by tx hash.
+ * surfaced; we de-dupe by tx hash. Each watcher is gated on the contract
+ * being deployed (non-zero address) so the hook is safe to mount before
+ * `npm run deploy:arc` has been run.
  */
 export function useLiveActivitySync() {
     const { address } = useAccount();
+
+    const ammDeployed =
+        OBSCURA_AMM_ADDRESS &&
+        OBSCURA_AMM_ADDRESS !== '0x0000000000000000000000000000000000000000';
+    const shieldDeployed =
+        OBSCURA_SHIELD_ADDRESS &&
+        OBSCURA_SHIELD_ADDRESS !== '0x0000000000000000000000000000000000000000';
 
     useWatchContractEvent({
         address: OBSCURA_AMM_ADDRESS,
         abi: OBSCURA_AMM_ABI,
         eventName: 'Swap',
         args: { user: address },
+        enabled: !!ammDeployed && !!address,
         onLogs(logs) {
             logs.forEach((log) => {
                 if (!log.transactionHash || processedTxs.has(log.transactionHash)) return;
@@ -53,13 +63,14 @@ export function useLiveActivitySync() {
                 });
             });
         },
-    });
+    } as any);
 
     useWatchContractEvent({
         address: OBSCURA_SHIELD_ADDRESS,
         abi: SHIELD_ABI,
         eventName: 'Shielded',
         args: { user: address },
+        enabled: !!shieldDeployed && !!address,
         onLogs(logs) {
             logs.forEach((log) => {
                 if (!log.transactionHash || processedTxs.has(log.transactionHash)) return;
@@ -74,13 +85,14 @@ export function useLiveActivitySync() {
                 });
             });
         },
-    });
+    } as any);
 
     useWatchContractEvent({
         address: OBSCURA_SHIELD_ADDRESS,
         abi: SHIELD_ABI,
         eventName: 'Unshielded',
         args: { user: address },
+        enabled: !!shieldDeployed && !!address,
         onLogs(logs) {
             logs.forEach((log) => {
                 if (!log.transactionHash || processedTxs.has(log.transactionHash)) return;
@@ -94,5 +106,5 @@ export function useLiveActivitySync() {
                 });
             });
         },
-    });
+    } as any);
 }
