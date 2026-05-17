@@ -302,12 +302,30 @@ async function enrollOrLogin(
         );
     }
 
-    const passkeyTransport = toPasskeyTransport(CLIENT_URL!, CLIENT_KEY!);
-    const credential = await toWebAuthnCredential({
-        transport: passkeyTransport,
-        mode,
+    console.log('[circle] passkey', mode === WebAuthnMode.Register ? 'register' : 'login', {
         username,
+        clientUrl: CLIENT_URL,
+        origin: typeof window !== 'undefined' ? window.location.origin : '(no window)',
     });
+
+    let credential: P256Credential;
+    try {
+        const passkeyTransport = toPasskeyTransport(CLIENT_URL!, CLIENT_KEY!);
+        credential = await toWebAuthnCredential({
+            transport: passkeyTransport,
+            mode,
+            username,
+        });
+        console.log('[circle] passkey credential obtained', {
+            id: (credential as any)?.id,
+        });
+    } catch (e: any) {
+        // Surface the underlying browser/Circle error so callers can debug.
+        const name = e?.name ?? 'UnknownError';
+        const detail = e?.message ?? e?.shortMessage ?? String(e);
+        console.error('[circle] passkey enrollment failed', { name, detail, raw: e });
+        throw e;
+    }
 
     if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_CRED_KEY, JSON.stringify(credential));
