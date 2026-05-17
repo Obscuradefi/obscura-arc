@@ -168,6 +168,7 @@ export async function sendGaslessCall(
     let userOpHash: Hex;
     try {
         userOpHash = await session.bundlerClient.sendUserOperation({
+            account: session.smartAccount,
             calls: [
                 {
                     to: call.to,
@@ -233,6 +234,7 @@ export async function sendGaslessBatch(
     }));
 
     const userOpHash = await session.bundlerClient.sendUserOperation({
+        account: session.smartAccount,
         calls: encoded,
         paymaster: true,
     });
@@ -258,6 +260,7 @@ export async function sendGaslessUsdc(
     amount: bigint
 ): Promise<{ userOpHash: Hex; txHash: Hex }> {
     const userOpHash = await session.bundlerClient.sendUserOperation({
+        account: session.smartAccount,
         calls: [encodeTransfer(to, usdcAddress, amount)],
         paymaster: true,
     });
