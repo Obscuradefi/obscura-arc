@@ -1,9 +1,199 @@
 # Lanjut: Instruksi untuk Antigravity Agent
 
-> **REVISI 2026-05-17 (v5)**:
-> - **Smart-route threshold**: trade < $1.000 default ke AMM (instant), trade ≥ $1.000 fan-out ke RFQ pool. Override via `VITE_RFQ_MIN_USD` (production = 100000).
-> - **Circle Modular Wallets**: code lengkap, tapi **diblok di sisi platform** — Console belum allowlist Arc Testnet untuk Client Key user. Tombol di header tampil `Passkey (Arc pending)`.
-> - **Tujuan jangka pendek**: deploy ke Vercel sekarang juga supaya bisa pakai dapp dari mana saja + record video demo.
+> **REVISI 2026-05-18 (v6)** — FINAL SUBMISSION CHECKLIST:
+> - Code work selesai. Vercel live di https://obscuraarc1.vercel.app
+> - 4 contracts deployed di Arc Testnet (AMM/Shield/RFQ/Nanopay), 23/23 tests pass
+> - Circle Passkey approve + swap **sudah bisa**. Modular Wallets aktif via Gas Station paymaster
+> - **Yang masih wajib**: end-to-end test live + record video demo + submit form
+
+---
+
+## ⚡ FINAL 3-PHASE PLAN UNTUK SUBMISSION (~2 jam total)
+
+### PHASE 1 — End-to-end test live (~15-30 menit)
+
+Target: pastikan tidak ada bug yang ketemu di tengah video recording.
+
+```
+Action checklist (urut, jangan dilewat):
+
+1. Buka https://obscuraarc1.vercel.app/app di Chrome/Edge profile baru (atau incognito)
+2. Klik "Circle Passkey" → "Create new passkey" → OS biometric prompt
+3. Setelah connect, copy smart account address dari tombol header
+4. Buka https://faucet.circle.com → Arc Testnet
+5. Paste smart account address, request:
+   - 30 USDC (untuk swap + Pyth fee)
+   - 5 EURC (untuk demo stable FX)
+6. Tunggu konfirmasi (sub-detik di Arc)
+7. Test swap kecil:
+   - Buka Swap tab
+   - Input: 1 USDC → GOLD
+   - Klik Approve USDC → passkey prompt
+   - Tunggu confirm di-bundler (5-10 detik)
+   - Klik Execute swap (gasless) → passkey prompt
+   - Verify: tx muncul di header link "Gasless tx", buka ArcScan
+8. Test Wake Oracle (kalau Pyth stale):
+   - Klik tombol "Wake Oracle" di header
+   - passkey prompt → tunggu confirm
+   - Console log harus ada [pythUpdater]
+9. Faucet mock token via tombol Faucet header
+   - Klik beberapa kali → cycle GOLD/AAPL/MSTR/JPYC ke smart account
+10. Test stable FX:
+    - Swap 1 USDC → EURC
+    - Verify: badge biru "Stablecoin FX pair detected" muncul
+11. Test inverse feed:
+    - Swap 1 USDC → JPYC
+    - Output ≈ 150 JPYC (USD/JPY ~150 inverted)
+12. Test Shield:
+    - Buka Shield tab
+    - Asset: USDC, level: HIGH, amount: 1
+    - Approve → Shield → countdown 24h muncul
+13. Test AI Agent:
+    - Klik tombol "AI" pojok kanan bawah
+    - Type: "swap 2 USDC to GOLD"
+    - Preview muncul → Confirm
+14. Test Nanopay badge:
+    - Setelah ~3 swap, badge kuning "Nanopayments active: $0.00X across N services" muncul di Swap card
+15. Buka Portfolio tab → verify saldo + history activity
+```
+
+**Issue umum di Phase 1**:
+
+| Gejala | Fix |
+|---|---|
+| Approve passkey jalan tapi Execute swap fail | Cek console log `[pythSwap]` + `[circle]`, paste ke saya |
+| Quote 0 / "Pyth oracle stale" | Klik Wake Oracle dulu (juga via passkey), lalu retry |
+| Smart account 0 USDC error AA21 | Faucet ulang ke address smart account |
+| Tab blank / browser console error | Hard refresh `Ctrl+Shift+R` atau coba incognito |
+| Allowance stuck di Approve walau sudah confirm | Refresh halaman (allowance read butuh ~1-2 block sebelum frontend re-detect) |
+
+---
+
+### PHASE 2 — Record demo video (~60-90 menit)
+
+Target: 3-4 menit MP4, 1080p, dengan voice-over.
+
+**Tools**:
+- OBS Studio (gratis): https://obsproject.com
+- Atau Loom (paid, tapi ada free tier untuk video <5 menit)
+
+**Pre-recording checklist**:
+- Smart account funded (USDC, EURC, mock GOLD/AAPL/MSTR/JPYC)
+- Pyth feeds fresh (klik Wake Oracle dulu sebelum mulai)
+- Browser di full-screen, hide bookmarks bar
+- Tutup tab/aplikasi yang notif (Discord, Slack, dll)
+- Test mic 5 detik dulu
+
+**Script (timeline 3:30 total)**:
+
+| 0:00–0:15 | Logo + tagline |
+| 0:15–0:30 | Connect via Circle Passkey, tunjukkan smart account address di header |
+| 0:30–1:00 | **Demo 1**: Faucet mock GOLD via tombol header → tunjukkan `Gasless tx` link → buka ArcScan, tunjukkan tx submitter = bundler, paymaster sponsor gas |
+| 1:00–1:45 | **Demo 2**: Swap 5 USDC → GOLD via passkey → quote panel hijau "AMM (Pyth-priced)" → tunjukkan harga match Pyth real-time |
+| 1:45–2:15 | **Demo 3**: Swap 1 USDC → EURC → badge biru FxEscrow muncul → klik link, buka FxEscrow di ArcScan |
+| 2:15–2:45 | **Demo 4**: AI Agent → conditional intent "buy GOLD with 5 USDC if drops 1%" → watcher armed |
+| 2:45–3:15 | **Demo 5**: Nanopay badge update → console log signed claims → narasi sub-cent billing |
+| 3:15–3:30 | Closing: GitHub repo URL + Vercel URL + thank you |
+
+**Voice-over key phrases** (jangan miss):
+- "Autonomous stablecoin agent on Arc"
+- "Multi-maker RFQ bounded by Pyth ±2%"
+- "Gasless via Circle Modular Wallets and Gas Station"
+- "Sub-cent USDC nanopayments"
+- "Conditional intents that watch and execute"
+- "Built for Track 4: Best Agentic Economy Experience"
+
+**Editing minimal**:
+- Trim awal/akhir
+- Add 1 fade-in title card (opsional)
+- Volume normalize voice-over
+- Export 1080p MP4
+- Upload ke YouTube unlisted atau Loom
+
+---
+
+### PHASE 3 — Submit ke hackathon portal (~15 menit)
+
+```
+Submission form fields:
+
+Title: Obscura — Autonomous Stablecoin Agent on Arc
+Track: Track 4 — Best Agentic Economy Experience on Arc
+Email: <isi Circle Developer Account email kamu>
+
+Circle products checklist (centang semua):
+  [x] USDC
+  [x] EURC
+  [x] Modular Wallets
+  [x] Nanopayments
+  [x] StableFX (conceptual)
+
+Live demo URL: https://obscuraarc1.vercel.app
+GitHub repo: https://github.com/Obscuradefi/obscura-arc
+Architecture: link ke ARCHITECTURE.md di repo
+Video URL: <link YouTube/Loom kamu>
+
+Description (max 200 words):
+  Obscura is an autonomous stablecoin agent on Arc Testnet that researches,
+  negotiates, and settles trades on behalf of users without per-step wallet
+  popups. Three synthetic RFQ makers fan out and return EIP-712 signed
+  quotes; an on-chain Pyth ±2% deviation cap defends users against
+  compromised maker keys. USDC nanopayments bill the agent for per-quote
+  and per-LLM-call work at sub-cent rates. Circle Modular Wallets enable
+  passkey-secured smart accounts with Gas Station-sponsored gas. EURC and
+  JPYC stablecoin pairs route through an FxEscrow-compatible flow. Built
+  on a fully Pyth-priced AMM with cross-asset routing through USDC.
+
+Circle Product Feedback: <copy section dari README.md>
+```
+
+**Setelah submit, jangan tutup tab**. Screenshot konfirmasi submission untuk arsip.
+
+---
+
+## ⚙️ Reference cepat
+
+```bash
+# Run hardhat tests
+npm run test:contracts          # 23/23 passing
+
+# Re-deploy semua kontrak (kalau perlu fresh addresses)
+npm run deploy:arc
+npm run seed:arc                # push Pyth + seed liquidity
+npm run verify:arc
+
+# Dev server lokal (untuk debug pre-recording)
+npm run dev                     # http://localhost:5173
+
+# Production build (untuk Vercel auto-deploy)
+git push origin main            # Vercel auto-build dari commit terbaru
+```
+
+## ⚠️ Yang JANGAN diubah lagi sebelum submission
+
+- `contracts/*.sol` — sudah tested 23/23
+- `src/lib/circleWallet.ts` (gas params + account argument) — baru saja work, jangan touch
+- `src/hooks/useUnifiedSendTx.ts` — single source of truth untuk wallet routing
+- `src/hooks/useEffectiveAccount.ts` — passkey priority logic
+
+## Realistic placement assessment
+
+Per evaluasi: **top 3 di Track 4** kalau video demo bagus + flow live tanpa hiccup.
+
+Differentiator yang harus ditonjolkan di video:
+1. Pyth-priced AMM (bukan x*y=k)
+2. Multi-maker RFQ dengan oracle ceiling
+3. Custom Nanopay contract dengan EIP-712
+4. Modular Wallets gasless flow
+5. Inverse Pyth feed (JPYC = USD/JPY inverted)
+
+---
+
+## ⏬ Sisanya di file ini hanya reference detail. Bagian utama sudah di atas.
+
+---
+
+
 
 ## TASK LIST UNTUK ANTIGRAVITY AGENT (PRIORITAS BERURUTAN)
 
