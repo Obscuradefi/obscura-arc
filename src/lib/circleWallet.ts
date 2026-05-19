@@ -68,6 +68,40 @@ const ARC_DEFAULT_MAX_FEE = 50_000_000_000n; // 50 gwei
 const ARC_TESTNET_PATH = 'arcTestnet';
 
 const STORAGE_CRED_KEY = 'obscura:circle:credential';
+const STORAGE_USERNAME_KEY = 'obscura:circle:username';
+
+/**
+ * Pick a username for the passkey enrollment. Strategy:
+ *   1. If the caller passed an explicit username, use that.
+ *   2. Otherwise, return a per-device username already stored in
+ *      localStorage so future logins reuse the same Circle-side identity.
+ *   3. Otherwise, generate a fresh one based on a random ID + timestamp.
+ *
+ * Using a per-device username avoids the "username duplicated" error that
+ * strikes whenever multiple users share a default like `obscura-agent` —
+ * Circle rejects the second registration server-side, and the auto-login
+ * fallback fails on devices that don't yet have the corresponding passkey
+ * stored locally (the OS dialog reports "no passkeys saved").
+ */
+function pickUsername(explicit?: string): string {
+    if (explicit && explicit !== DEFAULT_USERNAME) return explicit;
+    if (typeof localStorage !== 'undefined') {
+        const cached = localStorage.getItem(STORAGE_USERNAME_KEY);
+        if (cached) return cached;
+    }
+    // Generate a stable random username. We deliberately avoid the user's
+    // address or email — passkeys are scoped to (rpId, username) so a fresh
+    // ID every device-install is correct.
+    const rand =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? (crypto as any).randomUUID().slice(0, 8)
+            : Math.random().toString(36).slice(2, 10);
+    const fresh = `obscura-${rand}-${Date.now().toString(36)}`;
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_USERNAME_KEY, fresh);
+    }
+    return fresh;
+}
 
 // ---------- types ----------
 
@@ -96,21 +130,28 @@ export function isCircleWalletConfigured(): boolean {
  * Register a brand-new passkey (browser shows the OS-native passkey dialog)
  * and create a Circle Smart Account on Arc Testnet. Returns the full session
  * object the rest of the app uses to read and write.
+ *
+ * `username` defaults to a per-device random ID (see `pickUsername`). Pass
+ * an explicit value only if you specifically need to recover a specific
+ * Circle-side identity.
  */
 export async function registerCircleWallet(
-    username: string = DEFAULT_USERNAME
+    username?: string
 ): Promise<CircleWalletSession> {
-    return enrollOrLogin(username, WebAuthnMode.Register);
+    return enrollOrLogin(pickUsername(username), WebAuthnMode.Register);
 }
 
 /**
  * Log in with an existing passkey for the configured domain. The browser
  * presents the matching credentials and the user picks one.
+ *
+ * If `username` is omitted we use the per-device value stored in
+ * localStorage so the same passkey enrollment is reused.
  */
 export async function loginCircleWallet(
-    username: string = DEFAULT_USERNAME
+    username?: string
 ): Promise<CircleWalletSession> {
-    return enrollOrLogin(username, WebAuthnMode.Login);
+    return enrollOrLogin(pickUsername(username), WebAuthnMode.Login);
 }
 
 /**
@@ -142,6 +183,7 @@ export async function restoreCircleWallet(): Promise<CircleWalletSession | null>
 export function clearCircleWalletSession() {
     if (typeof localStorage !== 'undefined') {
         localStorage.removeItem(STORAGE_CRED_KEY);
+        localStorage.removeItem(STORAGE_USERNAME_KEY);
     }
 }
 
@@ -329,6 +371,9 @@ async function enrollOrLogin(
 
     if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_CRED_KEY, JSON.stringify(credential));
+        // Persist the username we used so future restoreCircleWallet() calls
+        // can recover the same Circle-side identity.
+        localStorage.setItem(STORAGE_USERNAME_KEY, username);
     }
 
     return openSessionFromCredential(credential, username);

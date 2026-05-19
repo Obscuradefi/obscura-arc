@@ -70,16 +70,16 @@ export const CircleWalletProvider: React.FC<{ children: React.ReactNode }> = ({
             const s = await registerCircleWallet(username);
             setSession(s);
         } catch (e: any) {
-            // Username already taken at Circle. Auto-fallback to login flow
-            // so the user doesn't have to switch button — same passkey, same
-            // smart account, just a different WebAuthn mode.
+            // Username conflict only happens when the caller force-passes a
+            // duplicate username explicitly. Default flow uses a per-device
+            // random ID so we should never hit this path in practice.
             const msg = String(e?.message ?? e ?? '').toLowerCase();
             const isDuplicate =
                 msg.includes('username is duplicated') ||
                 msg.includes('already registered') ||
                 e?.name === 'InvalidStateError';
 
-            if (isDuplicate) {
+            if (isDuplicate && username) {
                 console.log('[circle] username taken, falling back to login');
                 try {
                     const s = await loginCircleWallet(username);
