@@ -35,6 +35,36 @@ const PrivyLoginInner: React.FC = () => {
         const addr = wallet?.address || user?.wallet?.address;
         const short = addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : '0x???';
 
+        // Surface what the user actually used to log in. When they connect
+        // an external wallet (Rabby / MetaMask / etc.), Privy reports the
+        // wallet client; we map that to a friendly label so the button
+        // doesn't always say "Privy".
+        const walletClient = (wallet as any)?.walletClientType?.toString() ?? '';
+        const isEmbedded = walletClient === 'privy' || (wallet as any)?.connectorType === 'embedded';
+        const isEmail = !!user?.email?.address;
+        const isGoogle = !!user?.google;
+        const isApple = !!user?.apple;
+
+        const label = (() => {
+            if (isEmbedded && isEmail) return 'Email';
+            if (isEmbedded && isGoogle) return 'Google';
+            if (isEmbedded && isApple) return 'Apple';
+            if (isEmbedded) return 'Privy';
+            // External wallet path — pick up its display name.
+            if (walletClient === 'rabby_wallet') return 'Rabby';
+            if (walletClient === 'metamask') return 'MetaMask';
+            if (walletClient === 'coinbase_wallet') return 'Coinbase';
+            if (walletClient === 'rainbow') return 'Rainbow';
+            if (walletClient === 'wallet_connect') return 'WalletConnect';
+            if (walletClient === 'trust') return 'Trust';
+            if (walletClient === 'frame') return 'Frame';
+            // EIP-6963 detected wallets carry their own name.
+            if (walletClient && walletClient !== 'privy') {
+                return walletClient.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            }
+            return 'Wallet';
+        })();
+
         return (
             <div style={{ position: 'relative' }}>
                 <button
@@ -42,7 +72,7 @@ const PrivyLoginInner: React.FC = () => {
                     style={baseStyle({ active: true })}
                     title={addr}
                 >
-                    Privy · {short}
+                    {label} · {short}
                 </button>
                 {showMenu && (
                     <div
@@ -66,9 +96,9 @@ const PrivyLoginInner: React.FC = () => {
                                 marginBottom: 6,
                             }}
                         >
-                            Privy embedded wallet
-                            {user?.email?.address ? ` · ${user.email.address}` : ''}
-                            {user?.google?.email ? ` · ${user.google.email}` : ''}
+                            {isEmbedded
+                                ? `Privy embedded wallet${user?.email?.address ? ` · ${user.email.address}` : ''}${user?.google?.email ? ` · ${user.google.email}` : ''}`
+                                : `Connected via ${label}`}
                         </div>
                         <code
                             style={{

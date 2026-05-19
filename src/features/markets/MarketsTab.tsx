@@ -4,6 +4,25 @@ import { FLUX_ASSETS } from '../../data/fluxAssets';
 import { MOCK_MARKETS } from '../../data/mockMarkets';
 import { useMultiplePriceFeeds } from '../../hooks/usePriceFeed';
 
+/**
+ * Format a USD price with a precision that scales to the magnitude:
+ *   ≥1       -> 2 decimals (e.g. $4,500.00, $1.08)
+ *   0.01–1   -> 4 decimals (e.g. $0.0667)
+ *   <0.01    -> 6 decimals (e.g. $0.006667 for JPYC at ~150 yen/USD)
+ *
+ * Otherwise stables-paired-against-USD assets like JPYC end up rounded to
+ * "$0.01" which loses the actual exchange-rate signal. Same helper used in
+ * Portfolio + Markets so display stays consistent.
+ */
+function formatPrice(price: number): string {
+    if (!Number.isFinite(price) || price === 0) return '0.00';
+    const decimals = price >= 1 ? 2 : price >= 0.01 ? 4 : 6;
+    return price.toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+    });
+}
+
 interface MarketsTabProps {
   onSwapClick: (asset?: string) => void;
 }
@@ -72,7 +91,7 @@ const MarketsTab: React.FC<MarketsTabProps> = ({ onSwapClick }) => {
                         <span style={{ fontSize: '0.6rem', color: 'var(--green-400)', marginLeft: 5 }}>●</span>
                       </span>
                     ) : (
-                      <span>${marketData?.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <span>${formatPrice(marketData?.price ?? 0)}</span>
                     )}
                   </td>
                   <td style={{ padding: '18px 20px', textAlign: 'right' }}>
