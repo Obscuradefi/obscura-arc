@@ -410,17 +410,51 @@ const SwapAgent: React.FC = () => {
             if (result.type === 'insight') {
                 // Market insight: fetch live price + show analysis.
                 const asset = result.asset;
-                let priceInfo = '';
+                let priceLine = '';
+                let suggestion = '';
                 if (asset) {
                     try {
                         const price = await fetchAssetPrice(asset);
-                        priceInfo = `\n\n📊 ${asset} live price: $${price.toFixed(asset === 'JPYC' ? 6 : 2)}`;
-                    } catch { /* ignore */ }
+                        const fmt =
+                            price >= 1
+                                ? price.toFixed(2)
+                                : price >= 0.01
+                                ? price.toFixed(4)
+                                : price.toFixed(6);
+                        priceLine = `📊 ${asset} live oracle price: $${fmt}\n   (sourced from Pyth Network on Arc)\n\n`;
+
+                        // Inline auto-insight if LLM didn't provide one.
+                        if (!result.text) {
+                            const meta = getAsset(asset);
+                            const desc =
+                                asset === 'USDC'
+                                    ? 'USDC is the native gas + quote token on Arc. Always pegged to $1.'
+                                    : asset === 'EURC'
+                                    ? 'EURC is the Euro stablecoin native to Arc, mirroring EUR/USD via Pyth.'
+                                    : asset === 'JPYC'
+                                    ? 'JPYC is a mock Japanese Yen token. Pyth USD/JPY feed is inverted to derive USD per JPY.'
+                                    : asset === 'GOLD'
+                                    ? 'GOLD is a mock tokenized gold position priced via Pyth XAU/USD feed.'
+                                    : asset === 'AAPL'
+                                    ? 'AAPL is a mock equity token tracking Apple via Pyth equity feeds.'
+                                    : asset === 'MSTR'
+                                    ? 'MSTR is a mock equity token tracking MicroStrategy via Pyth.'
+                                    : `${asset} is tracked by an Obscura mock contract on Arc.`;
+                            suggestion =
+                                `${desc}\n\n` +
+                                `Try:\n` +
+                                `• "swap 5 USDC to ${asset}" to take a position\n` +
+                                (asset !== 'USDC'
+                                    ? `• "shield 1 ${asset} at high privacy" to hide your exposure\n`
+                                    : '') +
+                                `• "buy ${asset} with 50 USDC if ${asset} drops 5%" to set up a conditional`;
+                        }
+                    } catch {
+                        priceLine = `📊 ${asset}: live price unavailable. Check Pyth Hermes connectivity.\n\n`;
+                    }
                 }
-                const text = result.text
-                    ? result.text + priceInfo
-                    : `Market insight for ${asset ?? 'unknown'}${priceInfo}\n\nTip: try "swap 5 USDC to ${asset}" to trade.`;
-                addMsg(text);
+                const text = [priceLine, result.text, suggestion].filter(Boolean).join('').trim();
+                addMsg(text || `No insight available for ${asset}.`);
             } else if (result.type === 'liquidity') {
                 const li = result.liquidityIntent;
                 if (li.action === 'add') {

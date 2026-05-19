@@ -183,6 +183,24 @@ function parseInsight(message: string): ParseResult | null {
             }
         }
     }
+
+    // Single-word token symbol: "GOLD", "usdc", "AAPL" → treat as insight
+    // request for that asset. This catches the case where user just types a
+    // token name without any verb.
+    const trimmed = message.trim();
+    if (trimmed.split(/\s+/).length <= 2) {
+        const asset = resolveToken(trimmed.replace(/[^a-zA-Z]/g, ''));
+        if (asset) {
+            return {
+                success: true,
+                type: 'insight',
+                asset,
+                text: '',
+                source: 'regex',
+            };
+        }
+    }
+
     return null;
 }
 
