@@ -18,26 +18,36 @@ export interface PrivacyLevelMeta {
     description: string;
     /** Approximate lock window in seconds — actual value is read from chain. */
     lockSeconds: number;
+    /** Traffic-light color for the UI. */
+    color: string;
+    /** Background tint for the UI. */
+    bg: string;
 }
 
 export const PRIVACY_LEVELS: Record<PrivacyLevel, PrivacyLevelMeta> = {
     [PrivacyLevel.LOW]: {
         id: PrivacyLevel.LOW,
         label: 'Low',
-        description: 'Fast settlement. No lock. Best for small amounts.',
+        description: 'No lock. Instant withdraw. Minimal privacy.',
         lockSeconds: 0,
+        color: '#FF6B6B',
+        bg: 'rgba(255,107,107,0.08)',
     },
     [PrivacyLevel.MEDIUM]: {
         id: PrivacyLevel.MEDIUM,
         label: 'Medium',
-        description: '1-hour mixing window. Balanced privacy and UX.',
+        description: '1-hour mixing window. Balanced privacy.',
         lockSeconds: 60 * 60,
+        color: '#FFC454',
+        bg: 'rgba(255,196,84,0.08)',
     },
     [PrivacyLevel.HIGH]: {
         id: PrivacyLevel.HIGH,
         label: 'High',
-        description: '24-hour temporal de-correlation. For larger transfers.',
+        description: '24-hour de-correlation. Maximum privacy.',
         lockSeconds: 24 * 60 * 60,
+        color: '#4ADE80',
+        bg: 'rgba(74,222,128,0.08)',
     },
 };
 

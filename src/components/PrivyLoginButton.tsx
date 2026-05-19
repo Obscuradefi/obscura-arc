@@ -138,7 +138,7 @@ const PrivyLoginInner: React.FC = () => {
 
     return (
         <button onClick={() => login()} style={baseStyle({})}>
-            Sign in with email
+            Connect
         </button>
     );
 };

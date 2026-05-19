@@ -135,7 +135,25 @@ const ShieldTab: React.FC = () => {
       .filter((e): e is ShieldEntryRow => e !== null && e.active);
   }, [entriesQuery.data]);
 
-  // ---------- writes ----------
+  // Allowance check so we can show "Approve" only when needed and chain
+  // straight into "Shield" once the allowance is sufficient.
+  const { data: allowanceRaw, refetch: refetchAllowance } = useReadContract({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: [address as `0x${string}`, SHIELD_CONTRACT_ADDRESS],
+    query: { enabled: isConnected && !!address && asset?.deployed },
+  });
+
+  const amountBN = (() => {
+    if (!shieldAmount) return 0n;
+    try {
+      return parseUnits(shieldAmount, tokenDecimals);
+    } catch {
+      return 0n;
+    }
+  })();
+  const needsApproval = amountBN > 0n && (allowanceRaw === undefined || (allowanceRaw as bigint) < amountBN);
   const { send, lastHash: hash, isPending: isWriting } = useUnifiedSendTx();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
 
@@ -143,6 +161,7 @@ const ShieldTab: React.FC = () => {
     refetchPublic();
     refetchPrivate();
     refetchCount();
+    refetchAllowance();
     entriesQuery.refetch();
   }
 
@@ -294,17 +313,43 @@ const ShieldTab: React.FC = () => {
                   onClick={() => setPrivacyLevel(lvl)}
                   style={{
                     textAlign: 'left',
-                    padding: '10px 14px',
+                    padding: '12px 14px',
                     borderRadius: 10,
-                    background: active ? 'rgba(61,158,78,0.12)' : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${active ? 'var(--green-600)' : 'rgba(255,255,255,0.07)'}`,
-                    color: active ? 'var(--green-200)' : '#F0F0F0',
+                    background: active ? meta.bg : 'rgba(255,255,255,0.02)',
+                    border: `1px solid ${active ? meta.color : 'rgba(255,255,255,0.07)'}`,
+                    color: active ? meta.color : '#F0F0F0',
                     cursor: 'pointer',
                     transition: 'all 0.15s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{meta.label}</div>
-                  <div style={{ fontSize: '0.72rem', color: G.dim, marginTop: 2 }}>{meta.description}</div>
+                  {/* traffic-light dot */}
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      background: meta.color,
+                      boxShadow: active ? `0 0 8px ${meta.color}` : 'none',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        color: active ? meta.color : '#F0F0F0',
+                      }}
+                    >
+                      {meta.label}
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: G.dim, marginTop: 2 }}>
+                      {meta.description}
+                    </div>
+                  </div>
                 </button>
               );
             })}
@@ -346,46 +391,76 @@ const ShieldTab: React.FC = () => {
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            onClick={handleApprove}
-            disabled={!asset?.deployed}
+        {/*
+         * Single smart-action button. We auto-pick approve vs shield based
+         * on the on-chain allowance + intended amount. After approve confirms
+         * the allowance refetches and the same button switches into
+         * "Shield (LEVEL)" mode automatically. No more "klik 1, klik 2"
+         * confusion for newcomers.
+         */}
+        <button
+          onClick={async () => {
+            if (!asset?.deployed || amountBN === 0n) return;
+            if (needsApproval) {
+              await handleApprove();
+            } else {
+              await handleShield();
+            }
+          }}
+          disabled={!asset?.deployed || amountBN === 0n || isWriting || isConfirming}
+          style={{
+            width: '100%',
+            padding: '14px',
+            borderRadius: 10,
+            background: needsApproval
+              ? 'rgba(61,158,78,0.08)'
+              : PRIVACY_LEVELS[privacyLevel].bg,
+            border: `1px solid ${
+              needsApproval ? 'var(--green-700)' : PRIVACY_LEVELS[privacyLevel].color
+            }`,
+            color: needsApproval
+              ? 'var(--green-200)'
+              : PRIVACY_LEVELS[privacyLevel].color,
+            fontWeight: 800,
+            fontSize: '0.85rem',
+            cursor:
+              !asset?.deployed || amountBN === 0n || isWriting || isConfirming
+                ? 'not-allowed'
+                : 'pointer',
+            opacity:
+              !asset?.deployed || amountBN === 0n || isWriting || isConfirming ? 0.55 : 1,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            transition: 'all 0.2s',
+          }}
+        >
+          {amountBN === 0n
+            ? 'Enter amount'
+            : isWriting
+            ? 'Confirming…'
+            : isConfirming
+            ? 'Settling on Arc…'
+            : needsApproval
+            ? `Approve ${tokenSym}`
+            : `Shield ${tokenSym} · ${PRIVACY_LEVELS[privacyLevel].label}`}
+        </button>
+
+        {/* helper line below the button so users understand the flow */}
+        {amountBN > 0n && (
+          <div
             style={{
-              flex: 1,
-              padding: '12px',
-              borderRadius: 10,
-              background: 'rgba(61,158,78,0.08)',
-              border: '1px solid var(--green-700)',
-              color: 'var(--green-200)',
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              cursor: asset?.deployed ? 'pointer' : 'not-allowed',
-              opacity: asset?.deployed ? 1 : 0.5,
-              letterSpacing: '0.04em',
+              marginTop: 8,
+              fontSize: '0.7rem',
+              color: G.dim,
+              textAlign: 'center',
+              lineHeight: 1.5,
             }}
           >
-            1. Approve
-          </button>
-          <button
-            onClick={handleShield}
-            disabled={!asset?.deployed}
-            style={{
-              flex: 1,
-              padding: '12px',
-              borderRadius: 10,
-              background: 'rgba(61,158,78,0.15)',
-              border: '1px solid var(--green-600)',
-              color: 'var(--green-100)',
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              cursor: asset?.deployed ? 'pointer' : 'not-allowed',
-              opacity: asset?.deployed ? 1 : 0.5,
-              letterSpacing: '0.04em',
-            }}
-          >
-            2. Shield ({PRIVACY_LEVELS[privacyLevel].label})
-          </button>
-        </div>
+            {needsApproval
+              ? 'Step 1 of 2: approve the vault to pull your tokens. We chain straight into the shield deposit afterwards.'
+              : 'Step 2 of 2: deposit at the chosen privacy level.'}
+          </div>
+        )}
       </div>
 
       {/* encrypted vault */}
