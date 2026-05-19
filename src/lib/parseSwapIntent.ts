@@ -374,6 +374,7 @@ Valid tokens: ${VALID_TOKENS.join(', ')}. USDC is the quote/gas token on Arc.`,
                 ],
                 temperature: 0.3,
                 max_tokens: 200,
+                stream: false,
             }),
         });
 
