@@ -377,96 +377,155 @@ Valid tokens: ${VALID_TOKENS.join(', ')}. USDC is the quote/gas token on Arc.`,
             }),
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            const content = data?.choices?.[0]?.message?.content || '';
-            const jsonMatch = content.match(/\{[\s\S]+\}/);
-            if (jsonMatch) {
-                try {
-                    const parsed = JSON.parse(jsonMatch[0]);
-                    if (parsed.type === 'portfolio') {
-                        return { success: true, type: 'portfolio', source: 'ai' };
+        if (!response.ok) {
+            const errText = await response.text().catch(() => '');
+            console.warn('[parseWithAI] LLM response not ok:', response.status, errText);
+            return { success: false, type: 'swap', error: `LLM ${response.status}`, source: 'ai' };
+        }
+
+        const data = await response.json();
+        const content = data?.choices?.[0]?.message?.content || '';
+        console.log('[parseWithAI] LLM response:', content);
+
+        // Try to extract JSON from the response.
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.error) {
+                    // LLM explicitly said it can't parse — return the raw
+                    // content as insight anyway (better UX than error).
+                    const cleanText = content.replace(/\{[\s\S]*\}/, '').replace(/```[a-z]*\n?|\n?```/g, '').trim();
+                    if (cleanText) {
+                        return { success: true, type: 'insight', text: cleanText, source: 'ai' };
                     }
-                    if (parsed.type === 'shield' && parsed.action && parsed.token && parsed.amount > 0) {
-                        const token = resolveToken(parsed.token);
-                        const level = resolvePrivacyLevel(parsed.level);
-                        if (token) {
-                            return {
-                                success: true,
-                                type: 'shield',
-                                shieldIntent: { action: parsed.action, token, amount: parsed.amount, level },
-                                source: 'ai',
-                            };
-                        }
-                    }
-                    if (parsed.type === 'liquidity' && parsed.asset && parsed.action) {
-                        const asset = resolveToken(parsed.asset);
-                        if (asset && asset !== 'USDC') {
-                            return {
-                                success: true,
-                                type: 'liquidity',
-                                liquidityIntent: {
-                                    action: parsed.action,
-                                    asset,
-                                    amountAsset: Number(parsed.amountAsset) || 0,
-                                    amountUSDC: Number(parsed.amountUSDC) || 0,
-                                },
-                                source: 'ai',
-                            };
-                        }
-                    }
-                    if (parsed.type === 'insight' && parsed.text) {
-                        const asset = parsed.asset ? resolveToken(parsed.asset) : undefined;
+                    return { success: false, type: 'swap', error: parsed.error, source: 'ai' };
+                }
+                if (parsed.type === 'portfolio') {
+                    return { success: true, type: 'portfolio', source: 'ai' };
+                }
+                if (parsed.type === 'shield' && parsed.action && parsed.token && parsed.amount > 0) {
+                    const token = resolveToken(parsed.token);
+                    const level = resolvePrivacyLevel(parsed.level);
+                    if (token) {
                         return {
                             success: true,
-                            type: 'insight',
-                            asset: asset ?? undefined,
-                            text: String(parsed.text),
+                            type: 'shield',
+                            shieldIntent: { action: parsed.action, token, amount: parsed.amount, level },
                             source: 'ai',
                         };
                     }
-                    if (parsed.type === 'swap' || (parsed.amount && parsed.from && parsed.to)) {
-                        const from = resolveToken(parsed.from);
-                        const to = resolveToken(parsed.to);
-                        if (parsed.amount > 0 && from && to && from !== to) {
-                            return {
-                                success: true,
-                                type: 'swap',
-                                intent: { amount: parsed.amount, from, to },
-                                source: 'ai',
-                            };
-                        }
-                    }
-                } catch (e) {
-                    // fall through to insight fallback
                 }
+                if (parsed.type === 'liquidity' && parsed.asset && parsed.action) {
+                    const asset = resolveToken(parsed.asset);
+                    if (asset && asset !== 'USDC') {
+                        return {
+                            success: true,
+                            type: 'liquidity',
+                            liquidityIntent: {
+                                action: parsed.action,
+                                asset,
+                                amountAsset: Number(parsed.amountAsset) || 0,
+                                amountUSDC: Number(parsed.amountUSDC) || 0,
+                            },
+                            source: 'ai',
+                        };
+                    }
+                }
+                if (parsed.type === 'insight') {
+                    const asset = parsed.asset ? resolveToken(parsed.asset) : undefined;
+                    return {
+                        success: true,
+                        type: 'insight',
+                        asset: asset ?? undefined,
+                        text: String(parsed.text || ''),
+                        source: 'ai',
+                    };
+                }
+                if (parsed.type === 'swap' || (parsed.amount && parsed.from && parsed.to)) {
+                    const from = resolveToken(parsed.from);
+                    const to = resolveToken(parsed.to);
+                    if (parsed.amount > 0 && from && to && from !== to) {
+                        return {
+                            success: true,
+                            type: 'swap',
+                            intent: { amount: parsed.amount, from, to },
+                            source: 'ai',
+                        };
+                    }
+                }
+            } catch (e) {
+                // JSON parse failed — treat whole content as insight.
             }
         }
 
-        // LLM didn't return structured intent — give the raw content as a
-        // best-effort market insight so the agent never silently fails.
-        try {
-            const data = await response.clone().json().catch(() => null);
-            const content = data?.choices?.[0]?.message?.content;
-            if (content && typeof content === 'string') {
-                return {
-                    success: true,
-                    type: 'insight',
-                    text: content.replace(/```[a-z]*\n?|\n?```/g, '').trim(),
-                    source: 'ai',
-                };
-            }
-        } catch {
-            // ignore
+        // No valid JSON found — return the raw LLM text as insight.
+        // This handles cases where the LLM just responds conversationally.
+        const cleanContent = content.replace(/```[a-z]*\n?|\n?```/g, '').trim();
+        if (cleanContent) {
+            return {
+                success: true,
+                type: 'insight',
+                text: cleanContent,
+                source: 'ai',
+            };
         }
-        return { success: false, type: 'swap', error: 'No JSON in response', source: 'ai' };
+
+        return { success: false, type: 'swap', error: 'Empty LLM response', source: 'ai' };
     } catch (err: any) {
+        console.warn('[parseWithAI] fetch failed:', err?.message);
         return { success: false, type: 'swap', error: err.message || 'API call failed', source: 'ai' };
     }
 }
 
+/**
+ * Parse a user message into a structured intent.
+ *
+ * Routing strategy:
+ *   1. **Strong regex commands first**: explicit "swap X to Y", "shield X at Y",
+ *      "unshield X", "cek portfolio". These are deterministic and cheap.
+ *   2. **LLM for everything else**: insight requests, ambiguous phrasing,
+ *      Indonesian phrasing, multi-clause sentences, conditional intents.
+ *      The LLM can also return structured swap/shield intents — useful when
+ *      regex misses (e.g. "tolong belikan emas 10 dollar").
+ *   3. **Insight fallback**: if LLM is unconfigured AND message mentions a
+ *      single token symbol, surface that as a regex-derived insight so the
+ *      agent always says something useful.
+ *
+ * The result of regex is preferred over LLM only when regex is confident
+ * (clear verb + clear amount + clear pair). Anything fuzzy goes to LLM.
+ */
 export async function parseSwapIntent(message: string): Promise<ParseResult> {
+    // 1. Try strong regex first.
     const regexResult = parseWithRegex(message);
-    if (regexResult.success) return regexResult;
-    return parseWithAI(message);
+
+    // Strong regex hits = bypass LLM (fast path for explicit commands).
+    if (regexResult.success && (
+        regexResult.type === 'swap' ||
+        regexResult.type === 'shield' ||
+        regexResult.type === 'portfolio' ||
+        regexResult.type === 'conditional' ||
+        (regexResult.type === 'liquidity' && regexResult.liquidityIntent.action === 'add' && regexResult.liquidityIntent.amountAsset > 0)
+    )) {
+        return regexResult;
+    }
+
+    // 2. Try LLM for everything else (insight, ambiguous, Indonesian, etc).
+    //    LLM gets the original message AND can return structured intent OR
+    //    free-text insight depending on what fits.
+    const llmConfigured = Boolean((import.meta as any).env?.VITE_JATEVO_API_KEY);
+    if (llmConfigured) {
+        const aiResult = await parseWithAI(message);
+        if (aiResult.success) return aiResult;
+        // LLM failed — fall through to regex insight as last resort.
+    }
+
+    // 3. Regex insight (single-word token name etc.) — better than nothing.
+    if (regexResult.success && regexResult.type === 'insight') {
+        return regexResult;
+    }
+
+    // 4. Truly nothing worked. Return the LLM error if we tried it, else
+    //    regex error.
+    return regexResult;
 }
