@@ -27,19 +27,35 @@ export function isPrivyConfigured(): boolean {
 
 /**
  * Privy provider config. Tuned for an "agent-friendly" onboarding:
- *   - Email + Google + Apple at the top
- *   - Embedded wallet auto-created for users without one
- *   - Arc Testnet as the default + only chain (we don't want users
- *     accidentally landing on Ethereum mainnet)
- *   - Hide unused login options to keep the modal compact
+ *   - Email + Google + Apple + Wallet at the top
+ *   - `detected_wallets` puts every EIP-1193 provider injected by the
+ *     browser at the top of the wallet picker, including Rabby, Brave,
+ *     Trust, Frame, etc. (Without this, Privy only shows MetaMask,
+ *     Coinbase, and WalletConnect by default.)
+ *   - Embedded wallet auto-created for users without one (email/Google
+ *     login -> instant wallet)
+ *   - Arc Testnet as default + only chain so users can't accidentally
+ *     land on Ethereum mainnet
  */
 export const PRIVY_CONFIG = {
     appearance: {
         theme: 'dark' as const,
         accentColor: '#3D9E4E',
         logo: '/assets/2.png',
-        walletList: ['detected_wallets', 'metamask', 'wallet_connect'] as Array<
-            'detected_wallets' | 'metamask' | 'wallet_connect' | 'coinbase_wallet'
+        walletList: [
+            'detected_wallets',
+            'metamask',
+            'coinbase_wallet',
+            'rainbow',
+            'wallet_connect',
+            'rabby_wallet',
+        ] as Array<
+            | 'detected_wallets'
+            | 'metamask'
+            | 'wallet_connect'
+            | 'coinbase_wallet'
+            | 'rainbow'
+            | 'rabby_wallet'
         >,
     },
     loginMethods: ['email', 'google', 'apple', 'wallet'] as Array<
