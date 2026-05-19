@@ -15,6 +15,7 @@ import {
 import { OBSCURA_SHIELD_ADDRESS, OBSCURA_AMM_ADDRESS } from '../../config/arc';
 import { getMockPrice } from '../../lib/priceOracle';
 import { OBSCURA_AMM_ABI, ERC20_ABI } from '../../config/dexConfig';
+import TokenIcon from '../../components/TokenIcon';
 
 const PortfolioTab = ({ onNavigate }: { onNavigate?: (tab: TabId) => void }) => {
     const { address, isConnected, source } = useEffectiveAccount();
@@ -548,23 +549,7 @@ function AssetRow({
         <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s' }}>
             <td style={{ padding: '14px 18px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div
-                        style={{
-                            width: 36,
-                            height: 36,
-                            background: colors[colorIndex],
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 800,
-                            fontSize: '1rem',
-                            color: 'white',
-                            flexShrink: 0,
-                        }}
-                    >
-                        {asset.symbol.charAt(0)}
-                    </div>
+                    <TokenIcon symbol={asset.symbol} size={36} />
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                             <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#F0F0F0' }}>{asset.symbol}</div>

@@ -11,9 +11,6 @@ import MarketsTab from '../features/markets/MarketsTab';
 import LiquidityTab from '../features/liquidity/LiquidityTab';
 import SwapAgent from '../features/swap/SwapAgent';
 import ShieldTab from '../features/shield/ShieldTab';
-import ShadowActivityTab from '../features/shadow/ShadowActivityTab';
-import X402Tab from '../features/x402/X402Tab';
-import MultiAgentOrchestratorTab from '../features/agents/MultiAgentOrchestratorTab';
 import { addActivity } from '../lib/fluxMock';
 import { useLiveActivitySync } from '../hooks/useLiveActivitySync';
 import { useEffectiveAccount } from '../hooks/useEffectiveAccount';
@@ -21,7 +18,7 @@ import { useUnifiedSendTx } from '../hooks/useUnifiedSendTx';
 import { ERC20_ABI } from '../config/dexConfig';
 import { MOCK_TOKENS, type MockTokenSymbol } from '../config/arc';
 
-const VALID_TABS: TabId[] = ['shield', 'swap', 'stake', 'portfolio', 'markets', 'liquidity', 'bridge', 'shadow', 'x402', 'agents'];
+const VALID_TABS: TabId[] = ['shield', 'swap', 'stake', 'portfolio', 'markets', 'liquidity', 'bridge'];
 
 // Mock-token symbols that expose a public mint() faucet on Arc Testnet.
 // USDC + EURC are funded from https://faucet.circle.com (real Circle faucet)
@@ -95,9 +92,6 @@ const AppPage: React.FC = () => {
       case 'portfolio': return <PortfolioTab onNavigate={handleTabChange} />;
       case 'markets': return <MarketsTab onSwapClick={() => handleTabChange('swap')} />;
       case 'liquidity': return <LiquidityTab />;
-      case 'shadow': return <ShadowActivityTab />;
-      case 'x402': return <X402Tab />;
-      case 'agents': return <MultiAgentOrchestratorTab />;
       default: return null;
     }
   };

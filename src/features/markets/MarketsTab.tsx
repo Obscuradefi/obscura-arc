@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { FLUX_ASSETS } from '../../data/fluxAssets';
 import { MOCK_MARKETS } from '../../data/mockMarkets';
 import { useMultiplePriceFeeds } from '../../hooks/usePriceFeed';
+import TokenIcon from '../../components/TokenIcon';
 
 /**
  * Format a USD price with a precision that scales to the magnitude:
@@ -79,15 +80,20 @@ const MarketsTab: React.FC<MarketsTabProps> = ({ onSwapClick }) => {
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
                   <td style={{ padding: '18px 20px' }}>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#F0F0F0', marginBottom: 2 }}>{asset.symbol}</div>
-                    <div style={{ fontSize: '0.77rem', color: G.dim }}>{asset.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <TokenIcon symbol={asset.symbol} size={32} />
+                      <div>
+                        <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#F0F0F0', marginBottom: 2 }}>{asset.symbol}</div>
+                        <div style={{ fontSize: '0.77rem', color: G.dim }}>{asset.name}</div>
+                      </div>
+                    </div>
                   </td>
                   <td style={{ padding: '18px 20px', textAlign: 'right', fontWeight: 600, color: '#F0F0F0' }}>
                     {pricesLoading ? (
                       <span style={{ color: G.dim }}>...</span>
                     ) : realPrices[asset.symbol] ? (
                       <span>
-                        ${realPrices[asset.symbol].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${formatPrice(realPrices[asset.symbol])}
                         <span style={{ fontSize: '0.6rem', color: 'var(--green-400)', marginLeft: 5 }}>●</span>
                       </span>
                     ) : (

@@ -398,37 +398,68 @@ const PoolCard: React.FC<PoolCardProps> = ({
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {needsAssetApproval() && (
-                            <button
-                                style={{ ...btnBase, background: G.greenBg, borderColor: G.greenBorder, color: G.green }}
-                                onClick={handleApproveAsset}
-                                disabled={!amountAsset || isProcessing}
-                            >
-                                {isProcessing ? 'Approving…' : `1. Approve ${asset.symbol}`}
-                            </button>
-                        )}
-                        {needsUsdcApproval() && (
-                            <button
-                                style={{ ...btnBase, background: G.greenBg, borderColor: G.greenBorder, color: G.green }}
-                                onClick={handleApproveUSDC}
-                                disabled={!amountUSDC || isProcessing}
-                            >
-                                {isProcessing ? 'Approving…' : '2. Approve USDC'}
-                            </button>
-                        )}
+                        {/*
+                         * Single smart-action button. Auto-detects which step
+                         * is needed based on allowances:
+                         *   1. Approve asset (if asset allowance < amount)
+                         *   2. Approve USDC (if USDC allowance < amount)
+                         *   3. Add liquidity (when both approvals are ready)
+                         */}
                         <button
-                            style={{ ...btnBase, background: G.greenBg, borderColor: G.greenBorder, color: G.green }}
-                            onClick={handleAddLiquidity}
-                            disabled={
-                                !amountAsset ||
-                                !amountUSDC ||
-                                isProcessing ||
-                                needsAssetApproval() ||
-                                needsUsdcApproval()
-                            }
+                            style={{
+                                ...btnBase,
+                                padding: '13px',
+                                fontSize: '0.85rem',
+                                background: G.greenBg,
+                                borderColor: 'var(--green-600)',
+                                color: G.green,
+                                opacity: !amountAsset || !amountUSDC || isProcessing ? 0.55 : 1,
+                                cursor:
+                                    !amountAsset || !amountUSDC || isProcessing
+                                        ? 'not-allowed'
+                                        : 'pointer',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.06em',
+                            }}
+                            onClick={async () => {
+                                if (!amountAsset || !amountUSDC || isProcessing) return;
+                                if (needsAssetApproval()) {
+                                    await handleApproveAsset();
+                                } else if (needsUsdcApproval()) {
+                                    await handleApproveUSDC();
+                                } else {
+                                    await handleAddLiquidity();
+                                }
+                            }}
+                            disabled={!amountAsset || !amountUSDC || isProcessing}
                         >
-                            {isProcessing ? 'Adding…' : 'Add liquidity'}
+                            {!amountAsset || !amountUSDC
+                                ? 'Enter amounts'
+                                : isProcessing
+                                ? 'Confirming…'
+                                : needsAssetApproval()
+                                ? `Approve ${asset.symbol}`
+                                : needsUsdcApproval()
+                                ? 'Approve USDC'
+                                : 'Add liquidity'}
                         </button>
+
+                        {amountAsset && amountUSDC && !isProcessing && (
+                            <div
+                                style={{
+                                    fontSize: '0.7rem',
+                                    color: G.dim,
+                                    textAlign: 'center',
+                                    lineHeight: 1.5,
+                                }}
+                            >
+                                {needsAssetApproval()
+                                    ? `Step 1 of 3: approve ${asset.symbol}`
+                                    : needsUsdcApproval()
+                                    ? 'Step 2 of 3: approve USDC'
+                                    : 'Step 3 of 3: provide liquidity'}
+                            </div>
+                        )}
                     </div>
                     <button
                         style={{

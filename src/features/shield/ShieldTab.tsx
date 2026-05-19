@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   useReadContract,
   useWaitForTransactionReceipt,
@@ -70,6 +70,14 @@ const ShieldTab: React.FC = () => {
   const [tokenSym, setTokenSym] = useState<string>('USDC');
   const [shieldAmount, setShieldAmount] = useState('');
   const [privacyLevel, setPrivacyLevel] = useState<PrivacyLevel>(PrivacyLevel.MEDIUM);
+
+  // Live countdown ticker: re-render every second so locked entries show a
+  // ticking clock instead of stuck timestamps.
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const t = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const asset = getAsset(tokenSym);
   const tokenAddress = (asset?.contractAddress || '0x0000000000000000000000000000000000000000') as `0x${string}`;
@@ -483,9 +491,8 @@ const ShieldTab: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {entries.map((e) => {
               const meta = PRIVACY_LEVELS[e.level as PrivacyLevel];
-              const now = Math.floor(Date.now() / 1000);
-              const locked = now < e.unlockAt;
-              const remaining = locked ? formatRemaining(e.unlockAt - now) : null;
+              const locked = nowSec < e.unlockAt;
+              const remaining = locked ? formatRemaining(e.unlockAt - nowSec) : null;
               return (
                 <div
                   key={e.entryId}
@@ -549,9 +556,12 @@ const ShieldTab: React.FC = () => {
 };
 
 function formatRemaining(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.ceil(seconds / 60)}m`;
-  return `${Math.ceil(seconds / 3600)}h`;
+  if (seconds <= 0) return 'unlocked';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s}s`;
 }
 
 export default ShieldTab;
