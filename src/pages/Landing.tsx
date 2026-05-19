@@ -36,13 +36,15 @@ function AnimatedCounter({ target, prefix = '', suffix = '', decimals = 0 }: {
 }
 
 const tickerItems = [
-  { label: 'Maker pool fan-out: 3 quotes received in 280ms', color: 'var(--green-400)' },
-  { label: 'Pyth ceiling check passed: deviation 12bps', color: 'var(--green-300)' },
-  { label: 'Nanopay channel: agent paid $0.0035 across 4 services', color: 'var(--green-400)' },
-  { label: 'Conditional intent armed: GOLD < $4475 -> auto-execute', color: 'var(--green-300)' },
-  { label: 'EIP-712 quote signed by Wintermute persona', color: 'var(--green-400)' },
-  { label: 'AMM reserve rebalanced. USDC pool optimized.', color: 'var(--green-300)' },
-  { label: 'Settled on Arc: sub-second finality, 0.30% pool fee', color: 'var(--green-400)' },
+  { label: 'Shadow Layer online · 5 contracts deployed on Arc Testnet.', color: 'var(--green-400)' },
+  { label: 'Maker pool fan-out: 3 quotes received in 280ms.', color: 'var(--green-300)' },
+  { label: 'Pyth ceiling check passed: deviation 12bps.', color: 'var(--green-400)' },
+  { label: 'Nanopay channel: agent paid $0.0035 across 4 services.', color: 'var(--green-300)' },
+  { label: 'Conditional intent armed: GOLD < $4475 -> auto-execute.', color: 'var(--green-400)' },
+  { label: 'Shadow vault: 1.2 USDC deposited at HIGH privacy.', color: 'var(--green-300)' },
+  { label: 'Multi-agent orchestration: Researcher → Executor → Verifier.', color: 'var(--green-400)' },
+  { label: 'x402 micropayment: 0.001 USDC per oracle call.', color: 'var(--green-300)' },
+  { label: 'Settled on Arc: sub-second finality, 0.30% pool fee.', color: 'var(--green-400)' },
 ];
 
 function LiveTicker() {
@@ -177,16 +179,16 @@ const Landing: React.FC = () => {
             >
               <div className="hero-badge">
                 <div className="hero-badge-dot" />
-                <span className="hero-badge-text">Agentic Economy on Arc</span>
+                <span className="hero-badge-text">The Shadow Layer · Arc by Circle</span>
               </div>
 
               <h1 className="hero-title">
-                Autonomous<br />
-                <span>Stablecoin Agent</span>
+                The Shadow<br />
+                <span>Layer</span>
               </h1>
 
               <p className="hero-subtitle">
-                Obscura researches, negotiates, and settles trades on Arc on your behalf. Multi-maker RFQ bounded by Pyth, sub-cent USDC nanopayments for every micro-event, and intent-based execution from natural language.
+                Privacy infrastructure for the agentic economy. Obscura lets autonomous agents discover, negotiate, and settle stablecoin trades on Arc behind opaque commitments, oracle-bounded RFQ, and sub-cent USDC nanopayments.
               </p>
 
               <div className="hero-cta-row">

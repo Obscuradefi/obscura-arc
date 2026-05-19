@@ -1,8 +1,8 @@
-# Obscura — Autonomous Stablecoin Agent on Arc
+# Obscura — The Shadow Layer for Agentic Economy on Arc
 
 > **Submission for the Stablecoin Commerce Stack Challenge — Track 4: Best Agentic Economy Experience on Arc**
 >
-> Obscura is an autonomous on-chain agent that researches, negotiates, and settles stablecoin trades on Arc Testnet without per-step user clicks. It uses Pyth-priced AMMs, EIP-712 signed RFQ from a maker pool, and **USDC nanopayments at sub-cent granularity** to bill itself for the work it does.
+> Obscura is **The Shadow Layer**: privacy infrastructure for the agentic economy on Arc Testnet. Autonomous agents discover, negotiate, and settle stablecoin trades behind opaque commitments — Pyth-priced AMMs, EIP-712 signed RFQ from a maker pool, sub-cent USDC nanopayments, programmable opacity vaults, x402 pay-per-call APIs, and multi-agent orchestration that bills each sub-agent for its own work.
 
 [Architecture diagram + sequence diagrams →](./ARCHITECTURE.md)
 [Step-by-step instructions for the agent operator →](./lanjut.md)

@@ -2,6 +2,7 @@ import React from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useNavigate } from 'react-router-dom';
 import CircleWalletButton from './CircleWalletButton';
+import PrivyLoginButton from './PrivyLoginButton';
 import WakeUpOracle from './WakeUpOracle';
 
 interface AppHeaderProps {
@@ -84,6 +85,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onFaucetClick }) => {
 
         <WakeUpOracle />
         <CircleWalletButton />
+        <PrivyLoginButton />
         <ConnectButton />
       </div>
     </header>
