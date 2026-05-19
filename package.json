@@ -12,6 +12,7 @@
     "deploy:arc": "hardhat run scripts/deploy.cjs --network arcTestnet",
     "seed:arc": "hardhat run scripts/seedLiquidity.cjs --network arcTestnet",
     "verify:arc": "hardhat run scripts/verify.cjs --network arcTestnet",
+    "register:agent": "hardhat run scripts/register-agent.cjs --network arcTestnet",
     "node:local": "hardhat node",
     "deploy:local": "hardhat run scripts/deploy.cjs --network localhost"
   },

@@ -1,15 +1,18 @@
 // Intent parser for Obscura's AI Trading Agent.
 //
-// Supports four intent families:
+// Supports six intent families:
 //   1. swap        — "swap 5 USDC to GOLD"
 //   2. shield      — "shield 10 USDC at high privacy"
 //   3. unshield    — "unshield 5 USDC"
 //   4. portfolio   — "cek portfolio"
 //   5. conditional — "buy GOLD with 50 USDC if price drops 5%"
-//                    "shield 100 USDC at high privacy when AAPL > 250"
+//   6. insight     — "analisa market GOLD" / "how is AAPL doing?"
+//   7. liquidity   — "add liquidity 1 GOLD + 4500 USDC"
 //
 // Strategy: regex first (deterministic + free), then optionally fall back to
-// a Jatevo-hosted LLM for natural-language flexibility.
+// a Jatevo-hosted LLM for natural-language flexibility. If the LLM also
+// cannot parse a structured intent, it returns a free-text market insight
+// instead of an error.
 
 import { FLUX_ASSETS } from '../data/fluxAssets';
 import { PrivacyLevel } from '../config/shieldConfig';
@@ -44,11 +47,20 @@ export interface ConditionalIntent {
         | { kind: 'shield'; intent: ShieldIntent };
 }
 
+export interface LiquidityIntent {
+    asset: string;
+    amountAsset: number;
+    amountUSDC: number;
+    action: 'add' | 'remove';
+}
+
 export type ParseResult =
     | { success: true; type: 'swap'; intent: SwapIntent; source: 'regex' | 'ai' }
     | { success: true; type: 'shield'; shieldIntent: ShieldIntent; source: 'regex' | 'ai' }
     | { success: true; type: 'portfolio'; source: 'regex' | 'ai' }
     | { success: true; type: 'conditional'; conditional: ConditionalIntent; source: 'regex' | 'ai' }
+    | { success: true; type: 'insight'; text: string; asset?: string; source: 'regex' | 'ai' }
+    | { success: true; type: 'liquidity'; liquidityIntent: LiquidityIntent; source: 'regex' | 'ai' }
     | { success: false; type: 'swap'; error: string; source: 'regex' | 'ai' };
 
 const VALID_TOKENS = FLUX_ASSETS.map((a) => a.symbol.toUpperCase());
@@ -149,6 +161,81 @@ function parseSwap(message: string): ParseResult | null {
     return null;
 }
 
+function parseInsight(message: string): ParseResult | null {
+    // "analisa GOLD", "analyze MSTR", "market AAPL", "how is GOLD doing",
+    // "explain JPYC", "info EURC"
+    const insightPatterns = [
+        /(?:analisa|analyze|analysis|market|insight|info|explain|tell\s+me\s+about|how(?:'s|\s+is)|berapa\s+harga|harga|price\s+of)\s+(?:market\s+)?(\w+)/i,
+        /(\w+)\s+(?:market|price|insight|analysis|today)/i,
+    ];
+    for (const pattern of insightPatterns) {
+        const m = message.match(pattern);
+        if (m) {
+            const asset = resolveToken(m[1]);
+            if (asset) {
+                return {
+                    success: true,
+                    type: 'insight',
+                    asset,
+                    text: '',
+                    source: 'regex',
+                };
+            }
+        }
+    }
+    return null;
+}
+
+function parseLiquidity(message: string): ParseResult | null {
+    // "add liquidity 1 GOLD + 4500 USDC" / "tambah likuiditas 5 GOLD 4500 USDC"
+    // "remove liquidity GOLD" / "tarik likuiditas GOLD"
+    const addRe = /(?:add|tambah|provide|sediakan)\s+(?:liquidity|liq|likuiditas)\s+([\d.]+)\s+(\w+)\s*(?:\+|and|dan|with|dengan)?\s+([\d.]+)\s+(\w+)/i;
+    const addMatch = message.match(addRe);
+    if (addMatch) {
+        const a1 = parseFloat(addMatch[1]);
+        const t1 = resolveToken(addMatch[2]);
+        const a2 = parseFloat(addMatch[3]);
+        const t2 = resolveToken(addMatch[4]);
+        if (a1 > 0 && a2 > 0 && t1 && t2 && t1 !== t2) {
+            // USDC must be one side. Identify which.
+            const usdcSide = t1 === 'USDC' ? 1 : t2 === 'USDC' ? 2 : 0;
+            if (usdcSide > 0) {
+                return {
+                    success: true,
+                    type: 'liquidity',
+                    liquidityIntent: {
+                        action: 'add',
+                        asset: usdcSide === 1 ? t2 : t1,
+                        amountAsset: usdcSide === 1 ? a2 : a1,
+                        amountUSDC: usdcSide === 1 ? a1 : a2,
+                    },
+                    source: 'regex',
+                };
+            }
+        }
+    }
+
+    const removeRe = /(?:remove|tarik|withdraw|hapus)\s+(?:liquidity|liq|likuiditas)\s+(?:from\s+)?(\w+)/i;
+    const remMatch = message.match(removeRe);
+    if (remMatch) {
+        const asset = resolveToken(remMatch[1]);
+        if (asset && asset !== 'USDC') {
+            return {
+                success: true,
+                type: 'liquidity',
+                liquidityIntent: {
+                    action: 'remove',
+                    asset,
+                    amountAsset: 0,
+                    amountUSDC: 0,
+                },
+                source: 'regex',
+            };
+        }
+    }
+    return null;
+}
+
 function parseCondition(message: string): PriceCondition | null {
     // "if GOLD drops 5%", "when AAPL > 250", "kalau MSTR turun 3%"
     const pctDrop = message.match(/(?:if|when|kalau|jika)\s+(\w+)\s+(?:drops?|falls?|turun|jatuh|down)\s+([\d.]+)\s*%/i);
@@ -179,6 +266,14 @@ function parseCondition(message: string): PriceCondition | null {
 export function parseWithRegex(message: string): ParseResult {
     const portfolio = parsePortfolio(message);
     if (portfolio) return portfolio;
+
+    // Market insight: "analisa GOLD", "how is AAPL", "market MSTR", etc.
+    const insightResult = parseInsight(message);
+    if (insightResult) return insightResult;
+
+    // Liquidity: "add liquidity 1 GOLD + 4500 USDC", "remove liq GOLD"
+    const liqResult = parseLiquidity(message);
+    if (liqResult) return liqResult;
 
     // Conditional? Strip the condition and parse the action half.
     const condition = parseCondition(message);
@@ -244,58 +339,109 @@ export async function parseWithAI(message: string): Promise<ParseResult> {
                 messages: [
                     {
                         role: 'system',
-                        content: `Extract user intent from message. Return JSON only.
+                        content: `You are Obscura's AI trading agent on Arc Testnet. Extract user intent from message. Return JSON only.
+
 For swaps: {"type":"swap","amount":number,"from":"TOKEN","to":"TOKEN"}
 For shield: {"type":"shield","action":"shield"|"unshield","token":"TOKEN","amount":number,"level":"low"|"medium"|"high"}
 For portfolio: {"type":"portfolio"}
-If cannot parse: {"error":"cannot parse"}
-Valid tokens: ${VALID_TOKENS.join(', ')}.`,
+For liquidity: {"type":"liquidity","action":"add"|"remove","asset":"TOKEN","amountAsset":number,"amountUSDC":number}
+For market insight/analysis: {"type":"insight","asset":"TOKEN","text":"<brief 1-2 sentence analysis based on current market conditions>"}
+
+If the user asks a question about a token/market that isn't a trade command, return type "insight" with a brief analysis.
+Only return {"error":"cannot parse"} if the message is completely unrelated to crypto/trading.
+
+Valid tokens: ${VALID_TOKENS.join(', ')}. USDC is the quote/gas token on Arc.`,
                     },
                     { role: 'user', content: message },
                 ],
-                temperature: 0,
-                max_tokens: 100,
+                temperature: 0.3,
+                max_tokens: 200,
             }),
         });
 
-        if (!response.ok) throw new Error(`API Error ${response.status}`);
-        const data = await response.json();
-        const content = data?.choices?.[0]?.message?.content || '';
-        const jsonMatch = content.match(/\{[^}]+\}/);
-        if (!jsonMatch) throw new Error('No JSON in response');
-        const parsed = JSON.parse(jsonMatch[0]);
+        if (response.ok) {
+            const data = await response.json();
+            const content = data?.choices?.[0]?.message?.content || '';
+            const jsonMatch = content.match(/\{[\s\S]+\}/);
+            if (jsonMatch) {
+                try {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    if (parsed.type === 'portfolio') {
+                        return { success: true, type: 'portfolio', source: 'ai' };
+                    }
+                    if (parsed.type === 'shield' && parsed.action && parsed.token && parsed.amount > 0) {
+                        const token = resolveToken(parsed.token);
+                        const level = resolvePrivacyLevel(parsed.level);
+                        if (token) {
+                            return {
+                                success: true,
+                                type: 'shield',
+                                shieldIntent: { action: parsed.action, token, amount: parsed.amount, level },
+                                source: 'ai',
+                            };
+                        }
+                    }
+                    if (parsed.type === 'liquidity' && parsed.asset && parsed.action) {
+                        const asset = resolveToken(parsed.asset);
+                        if (asset && asset !== 'USDC') {
+                            return {
+                                success: true,
+                                type: 'liquidity',
+                                liquidityIntent: {
+                                    action: parsed.action,
+                                    asset,
+                                    amountAsset: Number(parsed.amountAsset) || 0,
+                                    amountUSDC: Number(parsed.amountUSDC) || 0,
+                                },
+                                source: 'ai',
+                            };
+                        }
+                    }
+                    if (parsed.type === 'insight' && parsed.text) {
+                        const asset = parsed.asset ? resolveToken(parsed.asset) : undefined;
+                        return {
+                            success: true,
+                            type: 'insight',
+                            asset: asset ?? undefined,
+                            text: String(parsed.text),
+                            source: 'ai',
+                        };
+                    }
+                    if (parsed.type === 'swap' || (parsed.amount && parsed.from && parsed.to)) {
+                        const from = resolveToken(parsed.from);
+                        const to = resolveToken(parsed.to);
+                        if (parsed.amount > 0 && from && to && from !== to) {
+                            return {
+                                success: true,
+                                type: 'swap',
+                                intent: { amount: parsed.amount, from, to },
+                                source: 'ai',
+                            };
+                        }
+                    }
+                } catch (e) {
+                    // fall through to insight fallback
+                }
+            }
+        }
 
-        if (parsed.error) {
-            return { success: false, type: 'swap', error: parsed.error, source: 'ai' };
-        }
-        if (parsed.type === 'portfolio') {
-            return { success: true, type: 'portfolio', source: 'ai' };
-        }
-        if (parsed.type === 'shield' && parsed.action && parsed.token && parsed.amount > 0) {
-            const token = resolveToken(parsed.token);
-            const level = resolvePrivacyLevel(parsed.level);
-            if (token) {
+        // LLM didn't return structured intent — give the raw content as a
+        // best-effort market insight so the agent never silently fails.
+        try {
+            const data = await response.clone().json().catch(() => null);
+            const content = data?.choices?.[0]?.message?.content;
+            if (content && typeof content === 'string') {
                 return {
                     success: true,
-                    type: 'shield',
-                    shieldIntent: { action: parsed.action, token, amount: parsed.amount, level },
+                    type: 'insight',
+                    text: content.replace(/```[a-z]*\n?|\n?```/g, '').trim(),
                     source: 'ai',
                 };
             }
+        } catch {
+            // ignore
         }
-        if (parsed.type === 'swap' || (parsed.amount && parsed.from && parsed.to)) {
-            const from = resolveToken(parsed.from);
-            const to = resolveToken(parsed.to);
-            if (parsed.amount > 0 && from && to && from !== to) {
-                return {
-                    success: true,
-                    type: 'swap',
-                    intent: { amount: parsed.amount, from, to },
-                    source: 'ai',
-                };
-            }
-        }
-        return { success: false, type: 'swap', error: 'Invalid parsed values', source: 'ai' };
+        return { success: false, type: 'swap', error: 'No JSON in response', source: 'ai' };
     } catch (err: any) {
         return { success: false, type: 'swap', error: err.message || 'API call failed', source: 'ai' };
     }

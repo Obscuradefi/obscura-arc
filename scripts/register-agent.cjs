@@ -1,0 +1,125 @@
+/* eslint-disable no-console */
+/**
+ * Register Obscura as an AI agent on Arc Testnet via ERC-8004.
+ *
+ * Mints an identity NFT in the on-chain IdentityRegistry, optionally records
+ * a reputation event, and writes the agent ID into the deployment manifest +
+ * frontend config so the UI can display "Registered Agent #X" badge.
+ *
+ * Run with the same deployer wallet used for the rest of Obscura:
+ *   npx hardhat run scripts/register-agent.cjs --network arcTestnet
+ *
+ * ERC-8004 contracts on Arc Testnet (per docs.arc.io):
+ *   IdentityRegistry:   0x8004A818BFB912233c491871b3d84c89A494BD9e
+ *   ReputationRegistry: 0x8004B663056A597Dffe9eCcC1965A193B7388713
+ *   ValidationRegistry: 0x8004Cb1BF31DAf7788923b405b754f57acEB4272
+ */
+const fs = require('node:fs');
+const path = require('node:path');
+const hre = require('hardhat');
+
+const IDENTITY_REGISTRY = '0x8004A818BFB912233c491871b3d84c89A494BD9e';
+const REPUTATION_REGISTRY = '0x8004B663056A597Dffe9eCcC1965A193B7388713';
+
+// Default metadata. Replace with an IPFS-hosted JSON when you have one.
+const DEFAULT_METADATA_URI =
+    process.env.AGENT_METADATA_URI ||
+    'ipfs://bafkreibdi6623n3xpf7ymk62ckb4bo75o3qemwkpfvp5i25j66itxvsoei';
+
+const IDENTITY_ABI = [
+    'function register(string metadataURI) external',
+    'function ownerOf(uint256 tokenId) external view returns (address)',
+    'function tokenURI(uint256 tokenId) external view returns (string)',
+    'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)',
+];
+
+const REPUTATION_ABI = [
+    'function giveFeedback(uint256 agentId, int128 score, uint8 category, string tag, string detailA, string detailB, string detailC, bytes32 hash) external',
+];
+
+async function main() {
+    const [deployer] = await hre.ethers.getSigners();
+    const network = hre.network.name;
+
+    console.log('────────────────────────────────────────────');
+    console.log(' Obscura — ERC-8004 Agent Registration');
+    console.log('────────────────────────────────────────────');
+    console.log(` network    : ${network}`);
+    console.log(` deployer   : ${deployer.address}`);
+    console.log(` metadata   : ${DEFAULT_METADATA_URI}`);
+    console.log('────────────────────────────────────────────\n');
+
+    const identity = new hre.ethers.Contract(IDENTITY_REGISTRY, IDENTITY_ABI, deployer);
+
+    // Step 1: register identity
+    console.log('[1/3] Calling IdentityRegistry.register(metadataURI)...');
+    const tx = await identity.register(DEFAULT_METADATA_URI);
+    console.log(`   tx: https://testnet.arcscan.app/tx/${tx.hash}`);
+    const receipt = await tx.wait();
+    console.log(`   confirmed in block ${receipt.blockNumber}`);
+
+    // Step 2: scrape Transfer event for tokenId
+    console.log('\n[2/3] Looking up agent ID from Transfer event...');
+    let agentId = null;
+    for (const log of receipt.logs ?? []) {
+        try {
+            const parsed = identity.interface.parseLog(log);
+            if (parsed?.name === 'Transfer' && parsed.args?.to?.toLowerCase() === deployer.address.toLowerCase()) {
+                agentId = parsed.args.tokenId.toString();
+                break;
+            }
+        } catch {
+            /* skip non-matching logs */
+        }
+    }
+    if (!agentId) {
+        console.warn('   WARNING: no Transfer event matched. Check ArcScan manually.');
+    } else {
+        console.log(`   agent ID  : ${agentId}`);
+        const owner = await identity.ownerOf(agentId);
+        const uri = await identity.tokenURI(agentId);
+        console.log(`   owner     : ${owner}`);
+        console.log(`   metadata  : ${uri}`);
+    }
+
+    // Step 3: record initial reputation feedback (skip if agent ID unknown).
+    // Per ERC-8004 the owner can't self-feedback, so this fails — keep as
+    // documentation of the call shape rather than a real action.
+    console.log('\n[3/3] Reputation registry: skipped (owner cannot self-feedback per ERC-8004).');
+    console.log('   Use a separate validator wallet to call ReputationRegistry.giveFeedback().');
+
+    // Persist agent ID alongside the deployment manifest so the frontend can
+    // display a "Registered Agent #X" badge.
+    if (agentId) {
+        const deploymentPath = path.resolve(__dirname, '..', 'deployments', 'arc-testnet.json');
+        if (fs.existsSync(deploymentPath)) {
+            const d = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
+            d.erc8004 = {
+                agentId,
+                identityRegistry: IDENTITY_REGISTRY,
+                reputationRegistry: REPUTATION_REGISTRY,
+                metadataURI: DEFAULT_METADATA_URI,
+                registeredAt: new Date().toISOString(),
+            };
+            fs.writeFileSync(deploymentPath, JSON.stringify(d, null, 2));
+            console.log(`\n  Wrote agent ID to ${deploymentPath}`);
+        }
+
+        const generated = path.resolve(__dirname, '..', 'src', 'config', 'erc8004.generated.ts');
+        const body =
+            `// AUTO-GENERATED by scripts/register-agent.cjs\n` +
+            `export const OBSCURA_AGENT_ID = ${agentId};\n` +
+            `export const ERC8004_IDENTITY_REGISTRY = '${IDENTITY_REGISTRY}' as \`0x\${string}\`;\n` +
+            `export const ERC8004_REPUTATION_REGISTRY = '${REPUTATION_REGISTRY}' as \`0x\${string}\`;\n` +
+            `export const OBSCURA_AGENT_METADATA_URI = ${JSON.stringify(DEFAULT_METADATA_URI)};\n`;
+        fs.writeFileSync(generated, body);
+        console.log(`  Wrote ${generated}`);
+    }
+
+    console.log('\n  Registration complete.');
+}
+
+main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+});

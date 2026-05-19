@@ -1,21 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits, keccak256, stringToHex } from 'viem';
+import { useEffectiveAccount } from '../../hooks/useEffectiveAccount';
 import {
     parseSwapIntent,
     ParseResult,
     SwapIntent,
     ShieldIntent,
     ConditionalIntent,
+    LiquidityIntent,
 } from '../../lib/parseSwapIntent';
 import { getAsset, isPairAllowed, FLUX_ASSETS } from '../../data/fluxAssets';
 import { OBSCURA_AMM_ABI } from '../../config/dexConfig';
-import { OBSCURA_AMM_ADDRESS, OBSCURA_SHIELD_ADDRESS, arcTxUrl } from '../../config/arc';
+import { OBSCURA_AMM_ADDRESS, OBSCURA_SHIELD_ADDRESS, RFQ_MAKER_ADDRESS, arcTxUrl } from '../../config/arc';
 import { SHIELD_ABI, PRIVACY_LEVELS, PrivacyLevel } from '../../config/shieldConfig';
 import { useTokenApproval } from '../../hooks/useTokenApproval';
 import { addActivity } from '../../lib/fluxMock';
 import { fetchAssetPrice } from '../../lib/priceOracle';
+import { chargeLlmParse, chargeRfqQuote, isNanopayConfigured } from '../../lib/nanopayClient';
 
 interface ChatMessage {
     role: 'user' | 'agent';
@@ -39,12 +42,13 @@ const SwapAgent: React.FC = () => {
         {
             role: 'agent',
             content:
-                "Hi! I'm your Obscura intent agent. Try:\n\n" +
-                '• "swap 5 USDC to GOLD"\n' +
-                '• "shield 10 USDC at high privacy"\n' +
-                '• "unshield 5 USDC"\n' +
-                '• "buy GOLD with 50 USDC if GOLD drops 5%"\n' +
-                '• "cek portfolio"',
+                "Hi! I'm your Obscura Shadow Layer agent. I can:\n\n" +
+                '🔄 swap 5 USDC to GOLD\n' +
+                '🔒 shield 10 USDC at high privacy\n' +
+                '💧 add liquidity 1 GOLD + 4500 USDC\n' +
+                '📊 analisa market GOLD\n' +
+                '⏰ buy GOLD with 50 USDC if GOLD drops 5%\n' +
+                '👤 cek portfolio',
         },
     ]);
     const [isLoading, setIsLoading] = useState(false);
@@ -55,7 +59,7 @@ const SwapAgent: React.FC = () => {
     const inputRef = useRef<HTMLInputElement>(null);
     const watcherRef = useRef<number | null>(null);
 
-    const { address, isConnected } = useAccount();
+    const { address, isConnected } = useEffectiveAccount();
 
     // Approval target derived from the immediate (non-conditional) action.
     const immediateAction =
@@ -383,11 +387,19 @@ const SwapAgent: React.FC = () => {
         try {
             const result: ParseResult = await parseSwapIntent(msg);
 
+            // Nanopay billing: charge for the LLM parse (or regex parse).
+            // Fire-and-forget so it doesn't block the UX.
+            if (address && isNanopayConfigured() && RFQ_MAKER_ADDRESS !== '0x0000000000000000000000000000000000000000') {
+                chargeLlmParse(address, RFQ_MAKER_ADDRESS as `0x${string}`).catch(() => {});
+            }
+
             if (!result.success) {
                 addMsg(
                     "I couldn't parse that. Try one of:\n" +
                         '• "swap 10 USDC to GOLD"\n' +
                         '• "shield 5 USDC at high privacy"\n' +
+                        '• "add liquidity 1 GOLD + 4500 USDC"\n' +
+                        '• "analisa market GOLD"\n' +
                         '• "buy GOLD with 50 USDC if GOLD drops 5%"\n' +
                         '• "cek portfolio"'
                 );
@@ -395,7 +407,36 @@ const SwapAgent: React.FC = () => {
                 return;
             }
 
-            if (result.type === 'portfolio') {
+            if (result.type === 'insight') {
+                // Market insight: fetch live price + show analysis.
+                const asset = result.asset;
+                let priceInfo = '';
+                if (asset) {
+                    try {
+                        const price = await fetchAssetPrice(asset);
+                        priceInfo = `\n\n📊 ${asset} live price: $${price.toFixed(asset === 'JPYC' ? 6 : 2)}`;
+                    } catch { /* ignore */ }
+                }
+                const text = result.text
+                    ? result.text + priceInfo
+                    : `Market insight for ${asset ?? 'unknown'}${priceInfo}\n\nTip: try "swap 5 USDC to ${asset}" to trade.`;
+                addMsg(text);
+            } else if (result.type === 'liquidity') {
+                const li = result.liquidityIntent;
+                if (li.action === 'add') {
+                    addMsg(
+                        `Preview: Add liquidity\n` +
+                            `• ${li.amountAsset} ${li.asset} + ${li.amountUSDC} USDC\n` +
+                            `• Pool: ${li.asset}/USDC on ObscuraAMM\n\n` +
+                            `Open the Liquidity tab to execute this. (Agent-driven liquidity coming soon.)`
+                    );
+                } else {
+                    addMsg(
+                        `Preview: Remove liquidity from ${li.asset}/USDC pool.\n\n` +
+                            `Open the Liquidity tab to execute this.`
+                    );
+                }
+            } else if (result.type === 'portfolio') {
                 const tokenList = FLUX_ASSETS.map((a) => `• ${a.symbol} — ${a.name}`).join('\n');
                 addMsg(
                     `Portfolio for ${address?.slice(0, 6)}…${address?.slice(-4)} on Arc Testnet.\n\nTracked tokens:\n${tokenList}\n\nOpen the Portfolio tab for live balances.`
