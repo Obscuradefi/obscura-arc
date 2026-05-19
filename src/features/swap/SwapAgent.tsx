@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits, keccak256, stringToHex } from 'viem';
 import { useEffectiveAccount } from '../../hooks/useEffectiveAccount';
+import { useUnifiedSendTx } from '../../hooks/useUnifiedSendTx';
 import {
     parseSwapIntent,
     ParseResult,
@@ -112,20 +112,9 @@ const SwapAgent: React.FC = () => {
         approveError,
     } = useTokenApproval(approvalTokenAddress, approvalAmount, approvalDecimals, approvalSpender);
 
-    // Two write contracts so swap/shield txs don't clobber each other.
-    const {
-        writeContract: executeSwap,
-        data: swapTxHash,
-        error: swapWriteError,
-    } = useWriteContract();
-    const { isSuccess: isSwapConfirmed } = useWaitForTransactionReceipt({ hash: swapTxHash });
-
-    const {
-        writeContract: executeShield,
-        data: shieldTxHash,
-        error: shieldWriteError,
-    } = useWriteContract();
-    const { isSuccess: isShieldConfirmed } = useWaitForTransactionReceipt({ hash: shieldTxHash });
+    // Unified tx sender — routes via Circle bundler when passkey active,
+    // wagmi otherwise. Replaces the old useWriteContract calls.
+    const { send: unifiedSend, lastHash: swapTxHash, isPending: isSending } = useUnifiedSendTx();
 
     const addMsg = (content: string, extra?: Partial<ChatMessage>) => {
         setMessages((prev) => [...prev, { role: 'agent', content, ...extra }]);
@@ -167,58 +156,6 @@ const SwapAgent: React.FC = () => {
             setStep('idle');
         }
     }, [approveError, step]);
-
-    useEffect(() => {
-        if (swapWriteError && step === 'executing') {
-            addMsg('Swap rejected or failed. You can try again.');
-            setStep('idle');
-        }
-    }, [swapWriteError, step]);
-
-    useEffect(() => {
-        if (shieldWriteError && step === 'executing') {
-            addMsg('Transaction rejected or failed. You can try again.');
-            setStep('idle');
-        }
-    }, [shieldWriteError, step]);
-
-    // ---------- Confirmations ----------
-    useEffect(() => {
-        if (!isSwapConfirmed || !pending) return;
-        const swap = pending.type === 'swap' ? pending.intent : null;
-        if (!swap) return;
-        addMsg(
-            `Swap complete. ${swap.amount} ${swap.from} → ${swap.to}. View on ArcScan.`,
-            { txHash: swapTxHash as string }
-        );
-        addActivity({
-            type: 'swap',
-            description: `AI Agent swap ${swap.amount} ${swap.from} → ${swap.to}`,
-            fromAsset: swap.from,
-            toAsset: swap.to,
-            amount: swap.amount,
-        });
-        setPending(null);
-        setStep('idle');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isSwapConfirmed]);
-
-    useEffect(() => {
-        if (!isShieldConfirmed || !pending || pending.type !== 'shield') return;
-        const verb = pending.intent.action === 'shield' ? 'Shielded' : 'Unshielded';
-        addMsg(`${verb} ${pending.intent.amount} ${pending.intent.token}.`, {
-            txHash: shieldTxHash as string,
-        });
-        addActivity({
-            type: pending.intent.action,
-            description: `AI Agent ${verb.toLowerCase()} ${pending.intent.amount} ${pending.intent.token}`,
-            fromAsset: pending.intent.token,
-            amount: pending.intent.amount,
-        });
-        setPending(null);
-        setStep('idle');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isShieldConfirmed]);
 
     // ---------- Conditional watcher ----------
     useEffect(() => {
@@ -276,7 +213,7 @@ const SwapAgent: React.FC = () => {
     }, [step, pending]);
 
     // ---------- Action triggers ----------
-    function triggerSwap(intent: SwapIntent) {
+    async function triggerSwap(intent: SwapIntent) {
         const from = getAsset(intent.from);
         const to = getAsset(intent.to);
         if (!from?.contractAddress || !to?.contractAddress) {
@@ -284,20 +221,38 @@ const SwapAgent: React.FC = () => {
             setStep('idle');
             return;
         }
-        executeSwap({
-            address: OBSCURA_AMM_ADDRESS,
-            abi: OBSCURA_AMM_ABI,
-            functionName: 'swap',
-            args: [
-                from.contractAddress as `0x${string}`,
-                to.contractAddress as `0x${string}`,
-                parseUnits(intent.amount.toString(), from.decimals),
-                0n,
-            ],
-        });
+        try {
+            const { txHash } = await unifiedSend({
+                to: OBSCURA_AMM_ADDRESS,
+                abi: OBSCURA_AMM_ABI,
+                functionName: 'swap',
+                args: [
+                    from.contractAddress as `0x${string}`,
+                    to.contractAddress as `0x${string}`,
+                    parseUnits(intent.amount.toString(), from.decimals),
+                    0n,
+                ],
+            });
+            addMsg(
+                `Swap complete. ${intent.amount} ${intent.from} → ${intent.to}. View on ArcScan.`,
+                { txHash }
+            );
+            addActivity({
+                type: 'swap',
+                description: `AI Agent swap ${intent.amount} ${intent.from} → ${intent.to}`,
+                fromAsset: intent.from,
+                toAsset: intent.to,
+                amount: intent.amount,
+            });
+            setPending(null);
+            setStep('idle');
+        } catch (e: any) {
+            addMsg(`Swap failed: ${e?.shortMessage ?? e?.message ?? String(e)}`);
+            setStep('idle');
+        }
     }
 
-    function triggerShield(intent: ShieldIntent) {
+    async function triggerShield(intent: ShieldIntent) {
         const asset = getAsset(intent.token);
         if (!asset?.contractAddress) {
             addMsg(`Cannot resolve contract address for ${intent.token}.`);
@@ -307,30 +262,46 @@ const SwapAgent: React.FC = () => {
         const level = intent.level ?? PrivacyLevel.MEDIUM;
         const salt = keccak256(stringToHex(`obscura:agent:${address}:${Date.now()}`));
 
-        if (intent.action === 'shield') {
-            executeShield({
-                address: OBSCURA_SHIELD_ADDRESS,
-                abi: SHIELD_ABI,
-                functionName: 'shield',
-                args: [
-                    asset.contractAddress as `0x${string}`,
-                    parseUnits(intent.amount.toString(), asset.decimals),
-                    level,
-                    salt,
-                ],
+        try {
+            let txHash: string;
+            if (intent.action === 'shield') {
+                const result = await unifiedSend({
+                    to: OBSCURA_SHIELD_ADDRESS,
+                    abi: SHIELD_ABI,
+                    functionName: 'shield',
+                    args: [
+                        asset.contractAddress as `0x${string}`,
+                        parseUnits(intent.amount.toString(), asset.decimals),
+                        level,
+                        salt,
+                    ],
+                });
+                txHash = result.txHash;
+            } else {
+                addMsg(
+                    'Unshield via the Shield tab to pick a specific entry. Falling back to entry #0…'
+                );
+                const result = await unifiedSend({
+                    to: OBSCURA_SHIELD_ADDRESS,
+                    abi: SHIELD_ABI,
+                    functionName: 'unshield',
+                    args: [asset.contractAddress as `0x${string}`, 0n, salt],
+                });
+                txHash = result.txHash;
+            }
+            const verb = intent.action === 'shield' ? 'Shielded' : 'Unshielded';
+            addMsg(`${verb} ${intent.amount} ${intent.token}.`, { txHash });
+            addActivity({
+                type: intent.action,
+                description: `AI Agent ${verb.toLowerCase()} ${intent.amount} ${intent.token}`,
+                fromAsset: intent.token,
+                amount: intent.amount,
             });
-        } else {
-            // Unshield: assume the user wants the most recent active entry.
-            // The Shield tab UI gives finer-grained control.
-            addMsg(
-                'Unshield via the Shield tab to pick a specific entry. Falling back to entry #0…'
-            );
-            executeShield({
-                address: OBSCURA_SHIELD_ADDRESS,
-                abi: SHIELD_ABI,
-                functionName: 'unshield',
-                args: [asset.contractAddress as `0x${string}`, 0n, salt],
-            });
+            setPending(null);
+            setStep('idle');
+        } catch (e: any) {
+            addMsg(`${intent.action} failed: ${e?.shortMessage ?? e?.message ?? String(e)}`);
+            setStep('idle');
         }
     }
 
