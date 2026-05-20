@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useReadContract } from 'wagmi';
-import { formatUnits, parseUnits } from 'viem';
+import { useReadContract, usePublicClient } from 'wagmi';
+import { formatUnits, parseUnits, encodeFunctionData } from 'viem';
 import { useEffectiveAccount } from '../../hooks/useEffectiveAccount';
 import { useUnifiedSendTx } from '../../hooks/useUnifiedSendTx';
 import { ERC20_ABI } from '../../config/dexConfig';
@@ -187,6 +187,35 @@ const StakeTab: React.FC = () => {
                     whose price appreciates as yield accrues from short-duration US Treasuries. Redeem anytime
                     to get back USDC + accumulated yield.
                 </div>
+
+                {/* Entitlements warning */}
+                {isConnected && (!usycBal || (usycBal as bigint) === 0n) && (
+                    <div
+                        style={{
+                            background: 'rgba(255,170,80,0.06)',
+                            border: '1px solid rgba(255,170,80,0.25)',
+                            borderRadius: 12,
+                            padding: '14px 18px',
+                            marginBottom: 24,
+                            fontSize: '0.78rem',
+                            color: 'rgba(255,200,140,0.9)',
+                            lineHeight: 1.6,
+                        }}
+                    >
+                        <strong style={{ color: '#FFAA50' }}>Whitelist required:</strong>{' '}
+                        USYC is a permissioned product. Your wallet address must be whitelisted by Circle
+                        before you can deposit. If deposit reverts, visit{' '}
+                        <a
+                            href="https://faucet.circle.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: '#FFAA50', textDecoration: 'underline' }}
+                        >
+                            faucet.circle.com
+                        </a>{' '}
+                        (select USYC + Arc Testnet) to request access, or contact Circle support.
+                    </div>
+                )}
 
                 {/* Mode toggle */}
                 <div
