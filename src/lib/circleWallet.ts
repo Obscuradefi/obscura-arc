@@ -171,10 +171,12 @@ export async function restoreCircleWallet(): Promise<CircleWalletSession | null>
     try {
         const credential = JSON.parse(cached) as P256Credential;
         return await openSessionFromCredential(credential);
-    } catch (e) {
+    } catch (e: any) {
         console.warn('[circleWallet] failed to restore session', e);
+        // If credential is stale/invalid, clear it so user can re-enroll
         if (typeof localStorage !== 'undefined') {
             localStorage.removeItem(STORAGE_CRED_KEY);
+            localStorage.removeItem(STORAGE_USERNAME_KEY);
         }
         return null;
     }
@@ -362,17 +364,29 @@ async function enrollOrLogin(
             id: (credential as any)?.id,
         });
     } catch (e: any) {
-        // Surface the underlying browser/Circle error so callers can debug.
         const name = e?.name ?? 'UnknownError';
         const detail = e?.message ?? e?.shortMessage ?? String(e);
         console.error('[circle] passkey enrollment failed', { name, detail, raw: e });
+
+        // "Invalid credentials" from viem/Circle means the stored passkey
+        // doesn't match what Circle's server expects (domain change, key
+        // rotation, or corrupted localStorage). Clear stale state so the
+        // user can try fresh.
+        if (detail.includes('Invalid credentials') || detail.includes('invalid credential')) {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.removeItem(STORAGE_CRED_KEY);
+                localStorage.removeItem(STORAGE_USERNAME_KEY);
+            }
+            throw new Error(
+                'Passkey credentials expired or invalid. Stale session cleared — please try "Create new passkey" again.'
+            );
+        }
+
         throw e;
     }
 
     if (typeof localStorage !== 'undefined') {
         localStorage.setItem(STORAGE_CRED_KEY, JSON.stringify(credential));
-        // Persist the username we used so future restoreCircleWallet() calls
-        // can recover the same Circle-side identity.
         localStorage.setItem(STORAGE_USERNAME_KEY, username);
     }
 
@@ -399,10 +413,26 @@ async function openSessionFromCredential(
 
     const owner = toWebAuthnAccount({ credential });
 
-    const smartAccount = await toCircleSmartAccount({
-        client: publicClient,
-        owner,
-    });
+    let smartAccount;
+    try {
+        smartAccount = await toCircleSmartAccount({
+            client: publicClient,
+            owner,
+        });
+    } catch (e: any) {
+        const msg = e?.message ?? String(e);
+        if (msg.includes('Invalid credentials') || msg.includes('invalid credential') || msg.includes('entity config')) {
+            // Clear stale credential
+            if (typeof localStorage !== 'undefined') {
+                localStorage.removeItem(STORAGE_CRED_KEY);
+                localStorage.removeItem(STORAGE_USERNAME_KEY);
+            }
+            throw new Error(
+                'Circle rejected the credential. This passkey may have been created on a different domain or client key. Please create a new passkey.'
+            );
+        }
+        throw e;
+    }
 
     const bundlerClient = createBundlerClient({
         smartAccount,

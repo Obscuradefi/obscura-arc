@@ -70,9 +70,6 @@ export const CircleWalletProvider: React.FC<{ children: React.ReactNode }> = ({
             const s = await registerCircleWallet(username);
             setSession(s);
         } catch (e: any) {
-            // Username conflict only happens when the caller force-passes a
-            // duplicate username explicitly. Default flow uses a per-device
-            // random ID so we should never hit this path in practice.
             const msg = String(e?.message ?? e ?? '').toLowerCase();
             const isDuplicate =
                 msg.includes('username is duplicated') ||
@@ -92,6 +89,8 @@ export const CircleWalletProvider: React.FC<{ children: React.ReactNode }> = ({
                 }
             }
 
+            // If credentials are invalid, the lib already cleared localStorage.
+            // Surface a helpful message so user knows to retry.
             setError(friendlyError(e));
             throw e;
         } finally {
@@ -148,6 +147,12 @@ function friendlyError(e: any): string {
     if (name === 'InvalidStateError') return 'A passkey for this username already exists. Try logging in instead.';
     if (msg.includes('username is duplicated') || msg.includes('username already taken'))
         return 'Username already exists. Sign in with the existing passkey instead.';
+    if (msg.includes('Invalid credentials') || msg.includes('invalid credential'))
+        return 'Passkey invalid or expired. Stale data cleared — try "Create new passkey".';
+    if (msg.includes('Stale session cleared'))
+        return 'Passkey expired. Please try "Create new passkey" again.';
+    if (msg.includes('entity config'))
+        return 'Circle has not enabled Arc Testnet for this client key yet. Use RainbowKit wallet instead.';
     if (msg.includes('155507')) return 'Modular Wallets do not yet support this chain.';
     if (msg.includes('155509')) return 'A paymaster policy is required in the Circle Console.';
     return msg;
