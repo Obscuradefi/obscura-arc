@@ -9,6 +9,7 @@ import { formatUnits, parseUnits } from 'viem';
 import { useEffectiveAccount } from '../../hooks/useEffectiveAccount';
 import { useUnifiedSendTx } from '../../hooks/useUnifiedSendTx';
 import { FLUX_ASSETS } from '../../data/fluxAssets';
+import TokenIcon from '../../components/TokenIcon';
 import { OBSCURA_AMM_ABI, ERC20_ABI } from '../../config/dexConfig';
 import {
     OBSCURA_AMM_ADDRESS,
@@ -222,11 +223,17 @@ const PoolCard: React.FC<PoolCardProps> = ({
     return (
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} style={G.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-                <div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#F0F0F0' }}>
-                        {asset.symbol} / USDC
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <TokenIcon symbol={asset.symbol} size={32} />
+                        <TokenIcon symbol="USDC" size={32} style={{ marginLeft: -10 }} />
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: G.dim, marginTop: 2 }}>{asset.name}</div>
+                    <div>
+                        <div style={{ fontSize: '1.15rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#F0F0F0' }}>
+                            {asset.symbol} / USDC
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: G.dim, marginTop: 2 }}>{asset.name}</div>
+                    </div>
                 </div>
                 <div
                     style={{
@@ -340,6 +347,13 @@ const PoolCard: React.FC<PoolCardProps> = ({
                 </div>
             ) : mode === 'add' ? (
                 <div>
+                    {/* Asset input with balance */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: '0.72rem', color: G.dim }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <TokenIcon symbol={asset.symbol} size={16} /> {asset.symbol}
+                        </span>
+                        <span>Balance: <span style={{ color: G.green, fontWeight: 600 }}>{formattedTokenBalance.toFixed(4)}</span></span>
+                    </div>
                     <div style={{ position: 'relative', marginBottom: 10 }}>
                         <input
                             type="number"
@@ -367,6 +381,13 @@ const PoolCard: React.FC<PoolCardProps> = ({
                         >
                             MAX
                         </button>
+                    </div>
+                    {/* USDC input with balance */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: '0.72rem', color: G.dim }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <TokenIcon symbol="USDC" size={16} /> USDC
+                        </span>
+                        <span>Balance: <span style={{ color: G.green, fontWeight: 600 }}>{formattedUsdcBalance.toFixed(4)}</span></span>
                     </div>
                     <div style={{ position: 'relative', marginBottom: 12 }}>
                         <input

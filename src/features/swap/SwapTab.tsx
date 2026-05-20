@@ -31,6 +31,7 @@ import { useUnifiedSendTx } from '../../hooks/useUnifiedSendTx';
 import { addActivity } from '../../lib/fluxMock';
 import { isRfqAvailable, quoteRemainingMs } from '../../lib/rfqMaker';
 import NanopayBadge from './NanopayBadge';
+import TokenIcon from '../../components/TokenIcon';
 
 const G = {
   card: {
@@ -78,30 +79,31 @@ function TokenSelector({
   onChange: (v: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const asset = getAsset(value);
   return (
-    <div style={{ position: 'relative', minWidth: 120 }}>
+    <div style={{ position: 'relative', minWidth: 140 }}>
       <button
         onClick={() => setOpen((o) => !o)}
         style={{
           background: 'rgba(255,255,255,0.04)',
           border: '1px solid rgba(255,255,255,0.1)',
           color: '#F0F0F0',
-          padding: '12px 16px',
+          padding: '10px 14px',
           borderRadius: 12,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
-          fontSize: '1rem',
+          fontSize: '0.92rem',
           fontWeight: 700,
           transition: 'all 0.2s',
           whiteSpace: 'nowrap',
           width: '100%',
-          justifyContent: 'space-between',
         }}
       >
-        {value}
-        <span style={{ fontSize: '0.65rem', color: G.dim, marginLeft: 4 }}>▼</span>
+        <TokenIcon symbol={value} size={24} />
+        <span>{value}</span>
+        <span style={{ fontSize: '0.6rem', color: G.dim, marginLeft: 'auto' }}>▼</span>
       </button>
       {open && (
         <div
@@ -116,32 +118,43 @@ function TokenSelector({
             zIndex: 100,
             overflow: 'hidden',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            maxHeight: 280,
+            overflowY: 'auto',
           }}
         >
-          {options.map((opt) => (
-            <button
-              key={opt}
-              onClick={() => {
-                onChange(opt);
-                setOpen(false);
-              }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '11px 16px',
-                background: opt === value ? 'rgba(61,158,78,0.1)' : 'transparent',
-                border: 'none',
-                color: opt === value ? G.green : G.secondary,
-                cursor: 'pointer',
-                textAlign: 'left',
-                fontSize: '0.92rem',
-                fontWeight: opt === value ? 700 : 400,
-                transition: 'background 0.15s',
-              }}
-            >
-              {opt}
-            </button>
-          ))}
+          {options.map((opt) => {
+            const optAsset = getAsset(opt);
+            return (
+              <button
+                key={opt}
+                onClick={() => {
+                  onChange(opt);
+                  setOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  width: '100%',
+                  padding: '11px 14px',
+                  background: opt === value ? 'rgba(61,158,78,0.1)' : 'transparent',
+                  border: 'none',
+                  color: opt === value ? G.green : G.secondary,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  fontSize: '0.88rem',
+                  fontWeight: opt === value ? 700 : 400,
+                  transition: 'background 0.15s',
+                }}
+              >
+                <TokenIcon symbol={opt} size={22} />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{opt}</div>
+                  <div style={{ fontSize: '0.68rem', color: G.dim }}>{optAsset?.name ?? ''}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
