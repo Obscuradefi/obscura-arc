@@ -74,9 +74,11 @@ export const CircleWalletProvider: React.FC<{ children: React.ReactNode }> = ({
             const isDuplicate =
                 msg.includes('username is duplicated') ||
                 msg.includes('already registered') ||
+                msg.includes('already exists') ||
                 e?.name === 'InvalidStateError';
 
-            if (isDuplicate && username) {
+            if (isDuplicate) {
+                // Username taken → auto-fallback to login
                 console.log('[circle] username taken, falling back to login');
                 try {
                     const s = await loginCircleWallet(username);
@@ -84,13 +86,16 @@ export const CircleWalletProvider: React.FC<{ children: React.ReactNode }> = ({
                     setError(null);
                     return;
                 } catch (loginErr: any) {
-                    setError(friendlyError(loginErr));
-                    throw loginErr;
+                    // Login also failed — clear stored username so next attempt generates fresh
+                    if (typeof localStorage !== 'undefined') {
+                        localStorage.removeItem('obscura:circle:username');
+                        localStorage.removeItem('obscura:circle:credential');
+                    }
+                    setError('Passkey not found on this device. Cleared stale data — try "Create new passkey" again.');
+                    return;
                 }
             }
 
-            // If credentials are invalid, the lib already cleared localStorage.
-            // Surface a helpful message so user knows to retry.
             setError(friendlyError(e));
             throw e;
         } finally {
