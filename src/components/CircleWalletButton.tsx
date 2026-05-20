@@ -139,11 +139,20 @@ const CircleWalletButton: React.FC = () => {
                     <button
                         onClick={async () => {
                             setShowMenu(false);
-                            try { await register(); } catch { /* surfaced via error state */ }
+                            try { await register(undefined, true); } catch { /* surfaced via error state */ }
                         }}
                         style={menuButtonStyle('primary')}
                     >
-                        Create new passkey
+                        Create passkey (this device)
+                    </button>
+                    <button
+                        onClick={async () => {
+                            setShowMenu(false);
+                            try { await register(); } catch { /* surfaced via error state */ }
+                        }}
+                        style={menuButtonStyle('secondary')}
+                    >
+                        Create passkey (phone/other)
                     </button>
                     <button
                         onClick={async () => {

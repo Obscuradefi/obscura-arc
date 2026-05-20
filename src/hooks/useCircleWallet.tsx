@@ -23,7 +23,7 @@ interface CircleWalletContextValue {
     isConfigured: boolean;
     isConnecting: boolean;
     error: string | null;
-    register: (username?: string) => Promise<void>;
+    register: (username?: string, preferPlatform?: boolean) => Promise<void>;
     login: (username?: string) => Promise<void>;
     disconnect: () => void;
 }
@@ -59,7 +59,7 @@ export const CircleWalletProvider: React.FC<{ children: React.ReactNode }> = ({
         };
     }, [isConfigured]);
 
-    const register = useCallback(async (username?: string) => {
+    const register = useCallback(async (username?: string, preferPlatform?: boolean) => {
         if (!isConfigured) {
             setError('Circle Modular Wallets are not configured. See lanjut.md.');
             return;
@@ -67,7 +67,7 @@ export const CircleWalletProvider: React.FC<{ children: React.ReactNode }> = ({
         setConnecting(true);
         setError(null);
         try {
-            const s = await registerCircleWallet(username);
+            const s = await registerCircleWallet(username, preferPlatform);
             setSession(s);
         } catch (e: any) {
             const msg = String(e?.message ?? e ?? '').toLowerCase();

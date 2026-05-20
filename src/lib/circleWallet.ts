@@ -134,11 +134,20 @@ export function isCircleWalletConfigured(): boolean {
  * `username` defaults to a per-device random ID (see `pickUsername`). Pass
  * an explicit value only if you specifically need to recover a specific
  * Circle-side identity.
+ *
+ * `preferPlatform` forces the browser to use the platform authenticator
+ * (Windows Hello, Touch ID) instead of showing cross-device QR options.
  */
 export async function registerCircleWallet(
-    username?: string
+    username?: string,
+    preferPlatform?: boolean
 ): Promise<CircleWalletSession> {
-    return enrollOrLogin(pickUsername(username), WebAuthnMode.Register);
+    if (preferPlatform) enablePlatformAuthenticatorHint();
+    try {
+        return await enrollOrLogin(pickUsername(username), WebAuthnMode.Register);
+    } finally {
+        if (preferPlatform) disablePlatformAuthenticatorHint();
+    }
 }
 
 /**
@@ -448,4 +457,33 @@ async function openSessionFromCredential(
         publicClient: publicClient as PublicClient,
         label: label ?? DEFAULT_USERNAME,
     };
+}
+
+// ---------- platform authenticator hint ----------
+// Circle's SDK doesn't expose authenticatorAttachment. We temporarily patch
+// navigator.credentials.create to inject { authenticatorSelection:
+// { authenticatorAttachment: "platform" } } so the browser prefers Windows
+// Hello / Touch ID over cross-device QR.
+
+let originalCreate: typeof navigator.credentials.create | null = null;
+
+function enablePlatformAuthenticatorHint() {
+    if (typeof window === 'undefined' || !navigator?.credentials) return;
+    originalCreate = navigator.credentials.create.bind(navigator.credentials);
+    (navigator.credentials as any).create = async (options: any) => {
+        if (options?.publicKey) {
+            options.publicKey.authenticatorSelection = {
+                ...options.publicKey.authenticatorSelection,
+                authenticatorAttachment: 'platform',
+            };
+        }
+        return originalCreate!(options);
+    };
+}
+
+function disablePlatformAuthenticatorHint() {
+    if (originalCreate && typeof window !== 'undefined' && navigator?.credentials) {
+        navigator.credentials.create = originalCreate;
+        originalCreate = null;
+    }
 }
