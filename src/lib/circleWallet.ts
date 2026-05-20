@@ -160,12 +160,15 @@ export async function registerCircleWallet(
 export async function loginCircleWallet(
     username?: string
 ): Promise<CircleWalletSession> {
-    enablePlatformGetHint();
-    try {
-        return await enrollOrLogin(pickUsername(username), WebAuthnMode.Login);
-    } finally {
-        disablePlatformGetHint();
+    // Try to get stored credential ID for faster lookup
+    const storedCred = typeof localStorage !== 'undefined'
+        ? localStorage.getItem(STORAGE_CRED_KEY)
+        : null;
+    let credentialId: string | undefined;
+    if (storedCred) {
+        try { credentialId = JSON.parse(storedCred)?.id; } catch {}
     }
+    return enrollOrLogin(pickUsername(username), WebAuthnMode.Login, credentialId);
 }
 
 /**
@@ -352,7 +355,8 @@ export async function sendGaslessUsdc(
 
 async function enrollOrLogin(
     username: string,
-    mode: WebAuthnMode
+    mode: WebAuthnMode,
+    credentialId?: string
 ): Promise<CircleWalletSession> {
     if (!isCircleWalletConfigured()) {
         throw new Error(
@@ -373,6 +377,7 @@ async function enrollOrLogin(
             transport: passkeyTransport,
             mode,
             username,
+            ...(credentialId ? { credentialId } : {}),
         });
         console.log('[circle] passkey credential obtained', {
             id: (credential as any)?.id,
