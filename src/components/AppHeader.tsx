@@ -3,6 +3,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useNavigate } from 'react-router-dom';
 import CircleWalletButton from './CircleWalletButton';
 import WakeUpOracle from './WakeUpOracle';
+import { useTheme } from '../hooks/useTheme';
 
 interface AppHeaderProps {
   /** Optional: when provided, the Faucet button mints a mock token. */
@@ -11,6 +12,7 @@ interface AppHeaderProps {
 
 const AppHeader: React.FC<AppHeaderProps> = ({ onFaucetClick }) => {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <header className="app-header">
@@ -24,6 +26,17 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onFaucetClick }) => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={toggleTheme}
+          className="theme-toggle-btn"
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          <img
+            src={theme === 'dark' ? '/assets/aapl.png' : '/assets/aapl2.png'}
+            alt="Theme toggle"
+            style={{ height: '20px', width: 'auto', objectFit: 'contain' }}
+          />
+        </button>
         <div
           style={{
             fontSize: '0.7rem',

@@ -336,24 +336,11 @@ export function parseWithRegex(message: string): ParseResult {
 }
 
 export async function parseWithAI(message: string): Promise<ParseResult> {
-    const env = (import.meta as any).env;
-    const apiKey = env?.VITE_JATEVO_API_KEY;
-    const baseUrl = env?.VITE_JATEVO_BASE_URL || 'https://jatevo.id/api/open/v1/inference';
-    const model = env?.VITE_JATEVO_MODEL || 'glm-4.7';
-
-    if (!apiKey) {
-        return { success: false, type: 'swap', error: 'No API key configured', source: 'ai' };
-    }
-
     try {
-        const response = await fetch(`${baseUrl}/chat/completions`, {
+        const response = await fetch('/api/ai-parse', {
             method: 'POST',
-            headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model,
                 messages: [
                     {
                         role: 'system',
@@ -374,7 +361,6 @@ Valid tokens: ${VALID_TOKENS.join(', ')}. USDC is the quote/gas token on Arc.`,
                 ],
                 temperature: 0.3,
                 max_tokens: 200,
-                stream: false,
             }),
         });
 
@@ -514,7 +500,7 @@ export async function parseSwapIntent(message: string): Promise<ParseResult> {
     // 2. Try LLM for everything else (insight, ambiguous, Indonesian, etc).
     //    LLM gets the original message AND can return structured intent OR
     //    free-text insight depending on what fits.
-    const llmConfigured = Boolean((import.meta as any).env?.VITE_JATEVO_API_KEY);
+    const llmConfigured = true; // LLM is now server-side via /api/ai-parse
     if (llmConfigured) {
         const aiResult = await parseWithAI(message);
         if (aiResult.success) return aiResult;

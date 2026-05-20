@@ -46,22 +46,26 @@ interface SignedSettlement {
   signature: Hex;
 }
 
-const SESSION_KEY_VAR = 'VITE_RFQ_MAKER_PRIVATE_KEY';
+const SESSION_KEY_VAR = 'OBSCURA_NANOPAY_SESSION_KEY';
 
 let cachedAccount: LocalAccount | null = null;
 
 /**
- * The "session key" we use to sign nanopay claims. Mirrors the maker key so
- * the demo can be self-contained: payer = the user/agent, payee = the
- * RFQ maker pool. In a Circle Modular Wallet integration this would be the
- * passkey-protected session key issued by the wallet.
+ * The "session key" we use to sign nanopay claims. For the demo, we generate
+ * a random ephemeral key per browser session (stored in sessionStorage).
+ * In production this would be a passkey-protected session key from Circle.
  */
 function getSessionAccount(): LocalAccount | null {
   if (cachedAccount) return cachedAccount;
-  const raw = (import.meta as any).env?.[SESSION_KEY_VAR];
-  if (!raw) return null;
   try {
-    cachedAccount = privateKeyToAccount(raw as Hex);
+    let key = sessionStorage.getItem(SESSION_KEY_VAR);
+    if (!key) {
+      // Generate a random ephemeral key for demo nanopay signing
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      key = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      sessionStorage.setItem(SESSION_KEY_VAR, key);
+    }
+    cachedAccount = privateKeyToAccount(key as Hex);
     return cachedAccount;
   } catch {
     return null;

@@ -262,7 +262,7 @@ export const docsContent: DocSection[] = [
                     {
                         type: 'paragraph',
                         content:
-                            'Parsing is regex-first (deterministic, free) with an optional Jatevo LLM fallback (set VITE_JATEVO_API_KEY). All trades require explicit wallet confirmation.',
+                            'Parsing is regex-first (deterministic, free) with an optional Jatevo LLM fallback (server-side via /api/ai-parse). All trades require explicit wallet confirmation.',
                     },
                 ],
             },

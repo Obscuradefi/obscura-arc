@@ -91,6 +91,73 @@
 }
 
 /* =========================================================
+   LIGHT THEME OVERRIDES
+   ========================================================= */
+[data-theme="light"] {
+  --void: #F5F5F7;
+  --surface: #FFFFFF;
+  --surface-light: #F0F0F2;
+  --surface-elevated: #E8E8EC;
+
+  --glass: rgba(255, 255, 255, 0.85);
+  --glass-light: rgba(0, 0, 0, 0.03);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-border-light: rgba(0, 0, 0, 0.05);
+  --glass-highlight: rgba(0, 0, 0, 0.02);
+
+  --text-main: #1A1A2E;
+  --text-secondary: #4A4A5A;
+  --text-dim: #7A7A8A;
+  --text-muted: #B0B0BA;
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.12);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] body {
+  background-image: url('/assets/bg-nature-2.jpg');
+}
+
+[data-theme="light"] .site-wrapper {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 80px rgba(0, 0, 0, 0.1), 0 0 160px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .obscura-nav {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+[data-theme="light"] .obscura-nav.scrolled {
+  background: rgba(255, 255, 255, 0.97);
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .dashboard-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .dashboard-sidebar {
+  background: rgba(245, 245, 247, 0.95);
+  border-right-color: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .obscura-card,
+[data-theme="light"] .arch-node,
+[data-theme="light"] .arch-center-pill,
+[data-theme="light"] .signal-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .comparison-table th,
+[data-theme="light"] .comparison-table td {
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* =========================================================
    RESET
    ========================================================= */
 *, *::before, *::after {
@@ -229,6 +296,23 @@ a {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.theme-toggle-btn {
+  background: var(--glass-light);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--glass);
+  border-color: var(--accent);
 }
 
 .nav-launch-btn {

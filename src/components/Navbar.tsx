@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../hooks/useTheme';
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -24,6 +26,17 @@ const Navbar: React.FC = () => {
         </div>
 
         <div className="nav-actions">
+          <button
+            onClick={toggleTheme}
+            className="theme-toggle-btn"
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            <img
+              src={theme === 'dark' ? '/assets/aapl.png' : '/assets/aapl2.png'}
+              alt="Theme toggle"
+              style={{ height: '22px', width: 'auto', objectFit: 'contain' }}
+            />
+          </button>
           <a href="/docs" className="nav-link-item" style={{ textDecoration: 'none' }}>Docs</a>
           <ConnectButton.Custom>
             {({ account, openConnectModal, mounted }) => {

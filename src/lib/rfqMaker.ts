@@ -54,10 +54,9 @@ export interface SignedQuote {
   improvementBps: number;
 }
 
-const MAKER_KEY: Hex | undefined =
-  (import.meta as any).env?.VITE_RFQ_MAKER_PRIVATE_KEY || undefined;
+const MAKER_KEY: Hex | undefined = undefined; // Moved to server-side /api/sign-quote
 const REMOTE_URL: string | undefined =
-  (import.meta as any).env?.VITE_RFQ_API_URL || undefined;
+  (import.meta as any).env?.VITE_RFQ_API_URL || '/api/sign-quote';
 
 // Synthetic maker pool. Each maker has a fixed personality (label + spread).
 // Keys are derived from `MAKER_KEY` so the deployer only needs to register
@@ -243,6 +242,8 @@ async function requestRemoteQuotes(
         amountIn: params.amountIn.toString(),
         fairAmountOut: params.fairAmountOut.toString(),
         expirySeconds: params.expirySeconds ?? 30,
+        chainId: ARC_TESTNET_CHAIN_ID,
+        verifyingContract: OBSCURA_RFQ_ADDRESS,
       }),
     });
     if (!res.ok) {

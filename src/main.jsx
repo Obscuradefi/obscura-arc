@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 import { config } from './wagmi';
 import { CircleWalletProvider } from './hooks/useCircleWallet';
+import { ThemeProvider } from './hooks/useTheme';
 
 const queryClient = new QueryClient();
 
@@ -21,14 +22,16 @@ const customTheme = darkTheme({
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={customTheme} modalSize="wide">
-          <CircleWalletProvider>
-            <AppRoutes />
-          </CircleWalletProvider>
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+    <ThemeProvider>
+      <WagmiProvider config={config}>
+        <QueryClientProvider client={queryClient}>
+          <RainbowKitProvider theme={customTheme} modalSize="wide">
+            <CircleWalletProvider>
+              <AppRoutes />
+            </CircleWalletProvider>
+          </RainbowKitProvider>
+        </QueryClientProvider>
+      </WagmiProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );
