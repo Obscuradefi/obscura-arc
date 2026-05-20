@@ -14,7 +14,7 @@ const AppTabs: React.FC<AppTabsProps> = ({ activeTab, onTabChange }) => {
     { id: 'shield', label: 'Vault' },
     { id: 'markets', label: 'Markets' },
     { id: 'liquidity', label: 'Liquidity' },
-    { id: 'stake', label: 'Stake', disabled: true },
+    { id: 'stake', label: 'Yield' },
     { id: 'bridge', label: 'Bridge', disabled: true },
   ];
 
