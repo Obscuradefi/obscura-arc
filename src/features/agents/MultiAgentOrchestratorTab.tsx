@@ -134,7 +134,7 @@ const MultiAgentOrchestratorTab: React.FC = () => {
         if (!isConnected || !address) {
             log({
                 role: 'researcher',
-                text: 'Connect a wallet (RainbowKit / Privy / Circle Passkey) to start orchestrating.',
+                text: 'Connect a wallet (RainbowKit or Circle Passkey) to start orchestrating.',
             });
             return;
         }

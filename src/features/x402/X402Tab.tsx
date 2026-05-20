@@ -183,7 +183,7 @@ const X402Tab: React.FC = () => {
                     {
                         label: 'Wallet path',
                         value: source ? source.toUpperCase() : 'NONE',
-                        color: source === 'circle' ? '#5FBFFF' : source === 'privy' ? '#A78BFA' : 'var(--green-300)',
+                        color: source === 'circle' ? '#5FBFFF' : 'var(--green-300)',
                     },
                 ].map((s) => (
                     <div
