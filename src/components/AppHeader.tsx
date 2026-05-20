@@ -1,9 +1,8 @@
 import React from 'react';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useNavigate } from 'react-router-dom';
 import CircleWalletButton from './CircleWalletButton';
-import PrivyLoginButton from './PrivyLoginButton';
 import WakeUpOracle from './WakeUpOracle';
-import { isPrivyConfigured } from '../config/privyConfig';
 
 interface AppHeaderProps {
   /** Optional: when provided, the Faucet button mints a mock token. */
@@ -12,7 +11,6 @@ interface AppHeaderProps {
 
 const AppHeader: React.FC<AppHeaderProps> = ({ onFaucetClick }) => {
   const navigate = useNavigate();
-  const privyAvailable = isPrivyConfigured();
 
   return (
     <header className="app-header">
@@ -86,29 +84,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onFaucetClick }) => {
 
         <WakeUpOracle />
         <CircleWalletButton />
-        {/*
-         * One "Sign in" button only. When Privy is configured we let it
-         * handle BOTH email/Google/Apple AND every injected wallet via
-         * `detected_wallets`, so Rabby / MetaMask / Coinbase / Trust all
-         * show up in the same modal. RainbowKit is hidden in that path.
-         * Falls back to RainbowKit when Privy isn't configured.
-         */}
-        {privyAvailable ? (
-          <PrivyLoginButton />
-        ) : (
-          <RainbowFallback />
-        )}
+        <ConnectButton />
       </div>
     </header>
   );
-};
-
-// Lazy import RainbowKit's button only when Privy isn't available so we
-// don't ship two parallel connect modals.
-const RainbowFallback: React.FC = () => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { ConnectButton } = require('@rainbow-me/rainbowkit');
-  return <ConnectButton />;
 };
 
 export default AppHeader;
