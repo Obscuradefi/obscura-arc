@@ -160,7 +160,12 @@ export async function registerCircleWallet(
 export async function loginCircleWallet(
     username?: string
 ): Promise<CircleWalletSession> {
-    return enrollOrLogin(pickUsername(username), WebAuthnMode.Login);
+    enablePlatformGetHint();
+    try {
+        return await enrollOrLogin(pickUsername(username), WebAuthnMode.Login);
+    } finally {
+        disablePlatformGetHint();
+    }
 }
 
 /**
@@ -466,6 +471,7 @@ async function openSessionFromCredential(
 // Hello / Touch ID over cross-device QR.
 
 let originalCreate: typeof navigator.credentials.create | null = null;
+let originalGet: typeof navigator.credentials.get | null = null;
 
 function enablePlatformAuthenticatorHint() {
     if (typeof window === 'undefined' || !navigator?.credentials) return;
@@ -485,5 +491,24 @@ function disablePlatformAuthenticatorHint() {
     if (originalCreate && typeof window !== 'undefined' && navigator?.credentials) {
         navigator.credentials.create = originalCreate;
         originalCreate = null;
+    }
+}
+
+function enablePlatformGetHint() {
+    if (typeof window === 'undefined' || !navigator?.credentials) return;
+    originalGet = navigator.credentials.get.bind(navigator.credentials);
+    (navigator.credentials as any).get = async (options: any) => {
+        if (options?.publicKey) {
+            // Prefer platform authenticator (Windows Hello) over cross-device
+            options.publicKey.authenticatorAttachment = 'platform';
+        }
+        return originalGet!(options);
+    };
+}
+
+function disablePlatformGetHint() {
+    if (originalGet && typeof window !== 'undefined' && navigator?.credentials) {
+        navigator.credentials.get = originalGet;
+        originalGet = null;
     }
 }
