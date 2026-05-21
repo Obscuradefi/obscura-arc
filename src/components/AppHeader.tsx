@@ -21,7 +21,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onFaucetClick }) => {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={toggleTheme} className="theme-toggle-btn" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-          <img src={theme === 'dark' ? '/assets/aapl.png' : '/assets/aapl2.png'} alt="Theme toggle" style={{ height: '20px', width: 'auto', objectFit: 'contain' }} />
+          {theme === 'dark' ? '\u2600' : '\u263D'}
         </button>
         <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-dim)', padding: '5px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-pill)', border: '1px solid var(--glass-border)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           Arc Testnet

@@ -76,16 +76,6 @@ const PortfolioTab = ({ onNavigate }: { onNavigate?: (tab: TabId) => void }) => 
         query: { enabled: !!address && isConnected && lpContracts.length > 0, refetchInterval: 6000 },
     });
 
-    const lpPositions = lpAssets.map((a, i) => {
-        const row = lpQueries.data?.[i];
-        const shares = row?.status === 'success' && row.result !== undefined
-            ? parseFloat(formatUnits(row.result as bigint, 18))
-            : 0;
-        const price = pricesBySymbol[a.symbol] ?? getMockPrice(a.symbol);
-        const valueUsd = shares * price * 2;
-        return { asset: a, shares, valueUsd };
-    }).filter(p => p.shares > 0);
-
     const encryptedBySymbol: Record<string, number> = {};
     const pricesBySymbol: Record<string, number> = {};
 
@@ -108,6 +98,16 @@ const PortfolioTab = ({ onNavigate }: { onNavigate?: (tab: TabId) => void }) => 
             pricesBySymbol[a.symbol] = getMockPrice(a.symbol);
         }
     });
+
+    const lpPositions = lpAssets.map((a, i) => {
+        const row = lpQueries.data?.[i];
+        const shares = row?.status === 'success' && row.result !== undefined
+            ? parseFloat(formatUnits(row.result as bigint, 18))
+            : 0;
+        const price = pricesBySymbol[a.symbol] ?? getMockPrice(a.symbol);
+        const valueUsd = shares * price * 2;
+        return { asset: a, shares, valueUsd };
+    }).filter(p => p.shares > 0);
 
     useEffect(() => {
         setActivities(getActivityHistory());

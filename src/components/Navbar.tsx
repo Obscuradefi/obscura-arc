@@ -29,11 +29,7 @@ const Navbar: React.FC = () => {
             className="theme-toggle-btn"
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
-            <img
-              src={theme === 'dark' ? '/assets/aapl.png' : '/assets/aapl2.png'}
-              alt="Theme toggle"
-              style={{ height: '22px', width: 'auto', objectFit: 'contain' }}
-            />
+            {theme === 'dark' ? '\u2600' : '\u263D'}
           </button>
           <a href="/docs" className="nav-link-item" style={{ textDecoration: 'none' }}>Docs</a>
           <button className="nav-launch-btn" onClick={goToApp}>
