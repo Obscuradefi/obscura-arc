@@ -59,6 +59,33 @@ const PortfolioTab = ({ onNavigate }: { onNavigate?: (tab: TabId) => void }) => 
         },
     });
 
+    const lpAssets = useMemo(() => FLUX_ASSETS.filter(a => a.deployed && !a.isQuote), []);
+
+    const lpContracts = useMemo(() => {
+        if (!address) return [];
+        return lpAssets.map(a => ({
+            address: OBSCURA_AMM_ADDRESS,
+            abi: OBSCURA_AMM_ABI,
+            functionName: 'liquidityShares',
+            args: [address as `0x${string}`, a.contractAddress as `0x${string}`],
+        }));
+    }, [address, lpAssets]);
+
+    const lpQueries = useReadContracts({
+        contracts: lpContracts as any[],
+        query: { enabled: !!address && isConnected && lpContracts.length > 0, refetchInterval: 6000 },
+    });
+
+    const lpPositions = lpAssets.map((a, i) => {
+        const row = lpQueries.data?.[i];
+        const shares = row?.status === 'success' && row.result !== undefined
+            ? parseFloat(formatUnits(row.result as bigint, 18))
+            : 0;
+        const price = pricesBySymbol[a.symbol] ?? getMockPrice(a.symbol);
+        const valueUsd = shares * price * 2;
+        return { asset: a, shares, valueUsd };
+    }).filter(p => p.shares > 0);
+
     const encryptedBySymbol: Record<string, number> = {};
     const pricesBySymbol: Record<string, number> = {};
 
@@ -320,6 +347,49 @@ const PortfolioTab = ({ onNavigate }: { onNavigate?: (tab: TabId) => void }) => 
                     </table>
                 </div>
             </div>
+
+            {/* liquidity positions */}
+            {lpPositions.length > 0 && (
+                <div
+                    style={{
+                        background: 'rgba(13,13,18,0.85)',
+                        border: '1px solid rgba(255,255,255,0.07)',
+                        borderRadius: 16,
+                        padding: '24px 28px',
+                    }}
+                >
+                    <h3 style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '-0.02em', color: '#F0F0F0', margin: '0 0 18px' }}>
+                        Liquidity Positions
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+                        {lpPositions.map(({ asset, shares, valueUsd }) => (
+                            <div
+                                key={asset.symbol}
+                                style={{
+                                    background: 'rgba(255,255,255,0.02)',
+                                    border: '1px solid rgba(255,255,255,0.06)',
+                                    borderRadius: 12,
+                                    padding: '18px 20px',
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                                    <TokenIcon symbol={asset.symbol} size={28} />
+                                    <span style={{ fontWeight: 700, fontSize: '0.92rem', color: '#F0F0F0' }}>
+                                        {asset.symbol} / USDC
+                                    </span>
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginBottom: 4 }}>LP Shares</div>
+                                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--green-300)' }}>
+                                    {shares.toFixed(4)}
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 8 }}>
+                                    Est. value: <span style={{ color: '#F0F0F0', fontWeight: 600 }}>${valueUsd.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* activity */}
             <div>

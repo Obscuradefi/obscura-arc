@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../hooks/useTheme';
 
 const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -38,23 +36,9 @@ const Navbar: React.FC = () => {
             />
           </button>
           <a href="/docs" className="nav-link-item" style={{ textDecoration: 'none' }}>Docs</a>
-          <ConnectButton.Custom>
-            {({ account, openConnectModal, mounted }) => {
-              if (!mounted) return null;
-              if (!account) {
-                return (
-                  <button className="nav-launch-btn" onClick={openConnectModal}>
-                    Launch app
-                  </button>
-                );
-              }
-              return (
-                <button className="nav-launch-btn" onClick={goToApp}>
-                  Launch app
-                </button>
-              );
-            }}
-          </ConnectButton.Custom>
+          <button className="nav-launch-btn" onClick={goToApp}>
+            Launch app
+          </button>
         </div>
       </nav>
     </>

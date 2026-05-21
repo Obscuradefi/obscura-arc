@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useReadContract, usePublicClient } from 'wagmi';
 import { formatUnits, parseUnits, encodeFunctionData } from 'viem';
@@ -91,8 +91,8 @@ const StakeTab: React.FC = () => {
         functionName: 'latestRoundData',
     });
 
-    const oraclePrice = oracleData ? Number((oracleData as readonly bigint[])[1]) / 1e8 : null;
-    const estApy = oraclePrice ? ((oraclePrice - 1) * 100).toFixed(2) : '—';
+    const oraclePrice = oracleData ? Number((oracleData as readonly bigint[])[1]) / 1e18 : null;
+    const estApy = oraclePrice ? ((oraclePrice - 1) * 100).toFixed(2) : 'â€”';
 
     const parsedAmount = (() => {
         try {
@@ -150,10 +150,10 @@ const StakeTab: React.FC = () => {
     };
 
     const buttonLabel = (() => {
-        if (isPending) return 'Confirming…';
+        if (isPending) return 'Confirmingâ€¦';
         if (mode === 'deposit' && needsApproval) return 'Approve USDC';
-        if (mode === 'deposit') return 'Deposit USDC → USYC';
-        return 'Redeem USYC → USDC';
+        if (mode === 'deposit') return 'Deposit USDC â†’ USYC';
+        return 'Redeem USYC â†’ USDC';
     })();
 
     const disabled = !isConnected || isPending || parsedAmount === 0n;
@@ -165,7 +165,7 @@ const StakeTab: React.FC = () => {
                     Yield
                 </h2>
                 <p style={{ color: S.dim, marginBottom: 28, fontFamily: 'JetBrains Mono', fontSize: '0.82rem' }}>
-                    USYC by Circle · US Treasury yield on Arc Testnet
+                    USYC by Circle Â· US Treasury yield on Arc Testnet
                 </p>
 
                 {/* Info box */}
@@ -269,10 +269,10 @@ const StakeTab: React.FC = () => {
                         {mode === 'deposit'
                             ? usdcBal !== undefined
                                 ? formatUnits(usdcBal as bigint, ARC_USDC_DECIMALS)
-                                : '—'
+                                : 'â€”'
                             : usycBal !== undefined
                                 ? formatUnits(usycBal as bigint, USYC_DECIMALS)
-                                : '—'}
+                                : 'â€”'}
                         {' '}
                         <span
                             style={{ color: S.green, cursor: 'pointer' }}
@@ -325,7 +325,7 @@ const StakeTab: React.FC = () => {
                             rel="noopener noreferrer"
                             style={{ color: S.green, textDecoration: 'underline' }}
                         >
-                            View on ArcScan ↗
+                            View on ArcScan â†—
                         </a>
                     </div>
                 )}
@@ -341,13 +341,13 @@ const StakeTab: React.FC = () => {
                 >
                     <StatBox
                         label="USYC Balance"
-                        value={usycBal !== undefined ? Number(formatUnits(usycBal as bigint, USYC_DECIMALS)).toFixed(4) : '—'}
+                        value={usycBal !== undefined ? Number(formatUnits(usycBal as bigint, USYC_DECIMALS)).toFixed(4) : 'â€”'}
                     />
                     <StatBox
                         label="Oracle Price"
-                        value={oraclePrice ? `$${oraclePrice.toFixed(6)}` : '—'}
+                        value={oraclePrice ? `$${oraclePrice.toFixed(6)}` : 'â€”'}
                     />
-                    <StatBox label="Est. APY" value={estApy !== '—' ? `${estApy}%` : '—'} />
+                    <StatBox label="Est. APY" value={estApy !== 'â€”' ? `${estApy}%` : 'â€”'} />
                 </div>
             </motion.div>
         </div>
