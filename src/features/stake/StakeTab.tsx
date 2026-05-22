@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useReadContract, usePublicClient } from 'wagmi';
 import { formatUnits, parseUnits, encodeFunctionData } from 'viem';
@@ -50,7 +50,7 @@ const S = {
 };
 
 const StakeTab: React.FC = () => {
-    const { address, isConnected } = useEffectiveAccount();
+    const { address, isConnected, source } = useEffectiveAccount();
     const { send, isPending, lastHash, error } = useUnifiedSendTx();
 
     const [mode, setMode] = useState<Mode>('deposit');
@@ -156,7 +156,8 @@ const StakeTab: React.FC = () => {
         return 'Redeem USYC â†’ USDC';
     })();
 
-    const disabled = !isConnected || isPending || parsedAmount === 0n;
+    const isCircleActive = source === 'circle';
+    const disabled = !isConnected || isPending || parsedAmount === 0n || !isCircleActive;
 
     return (
         <div style={{ maxWidth: 520, margin: '0 auto' }}>
@@ -217,6 +218,27 @@ const StakeTab: React.FC = () => {
                     </div>
                 )}
 
+
+                {!isCircleActive && isConnected && (
+                    <div
+                        style={{
+                            background: 'rgba(255,85,119,0.08)',
+                            border: '1px solid rgba(255,85,119,0.25)',
+                            borderRadius: 12,
+                            padding: '12px 14px',
+                            marginBottom: 20,
+                            fontSize: '0.78rem',
+                            color: '#FFB0BD',
+                            lineHeight: 1.6,
+                        }}
+                    >
+                        Yield requires Circle Passkey wallet (whitelist-gated). Active wallet now is extension wallet. Please connect Circle Passkey first.
+                    </div>
+                )}
+
+                <div style={{ marginBottom: 14, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                    Active account: <code style={{ color: 'var(--green-300)' }}>{address ?? '—'}</code> ({source ?? 'none'})
+                </div>
                 {/* Mode toggle */}
                 <div
                     style={{
